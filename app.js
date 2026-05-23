@@ -1,5 +1,12 @@
 const artworks = [
   {
+    title: "Auroral Vines",
+    path: "auroral-vines/",
+    description: "Bioluminescent hanging vines glow and swing under touch.",
+    thumb: "auroral-vines/thumb.jpg",
+    accent: "#082922"
+  },
+  {
     title: "Night Survey",
     path: "night-survey/",
     description: "An interactive sketch that grows constellation graphs from click or touch input.",
