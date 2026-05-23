@@ -164,7 +164,9 @@ if (artworks.length === 0) {
       const y = Math.pow(distance, 1.42) * 38;
       const rotate = offset * 9;
       const scale = Math.max(0.64, 1.12 - distance * 0.15);
-      const opacity = Math.max(0.18, 1 - distance * 0.22);
+      const baseOpacity = Math.max(0.18, 1 - distance * 0.22);
+      const edgeFade = distance > 2.4 ? Math.max(0, (3 - distance) / 0.6) : 1;
+      const opacity = baseOpacity * edgeFade;
 
       piece.style.visibility = "visible";
       piece.classList.toggle("is-selected", index === selectedIndex);
