@@ -72,6 +72,7 @@ let didDrag = false;
 let pressedIndex = -1;
 let cardWidth = 220;
 let spread = 120;
+let isMobileLayout = false;
 
 if (artworks.length === 0) {
   archive.innerHTML = `
@@ -136,7 +137,10 @@ if (artworks.length === 0) {
 
   const updateMeasurements = () => {
     cardWidth = pieces[0]?.offsetWidth || cardWidth;
-    spread = Math.min(cardWidth * 0.68, Math.max(cardWidth * 0.48, archive.clientWidth * 0.17));
+    isMobileLayout = window.matchMedia("(max-width: 680px)").matches;
+    spread = isMobileLayout
+      ? Math.min(cardWidth * 0.62, Math.max(cardWidth * 0.42, archive.clientHeight * 0.13))
+      : Math.min(cardWidth * 0.68, Math.max(cardWidth * 0.48, archive.clientWidth * 0.17));
   };
 
   const shortestDelta = (from, to) => {
@@ -160,9 +164,13 @@ if (artworks.length === 0) {
         return;
       }
 
-      const x = offset * spread;
-      const y = Math.pow(distance, 1.42) * 38;
-      const rotate = offset * 9;
+      const x = isMobileLayout
+        ? 0
+        : offset * spread;
+      const y = isMobileLayout
+        ? offset * spread
+        : Math.pow(distance, 1.42) * 38;
+      const rotate = isMobileLayout ? 0 : offset * 9;
       const scale = Math.max(0.64, 1.12 - distance * 0.15);
       const baseOpacity = Math.max(0.18, 1 - distance * 0.22);
       const edgeFade = distance > 2.4 ? Math.max(0, (3 - distance) / 0.6) : 1;
@@ -256,7 +264,7 @@ if (artworks.length === 0) {
     clearTimeout(snapTimer);
     archive.classList.add("is-dragging");
     archive.setPointerCapture(event.pointerId);
-    dragStartX = event.clientX;
+    dragStartX = isMobileLayout ? event.clientY : event.clientX;
     dragStartRotation = rotation;
     didDrag = false;
     pressedIndex = pieces.indexOf(event.target.closest(".piece"));
@@ -267,7 +275,9 @@ if (artworks.length === 0) {
       return;
     }
 
-    const distance = event.clientX - dragStartX;
+    const distance = isMobileLayout
+      ? event.clientY - dragStartX
+      : event.clientX - dragStartX;
 
     didDrag ||= Math.abs(distance) > 6;
     rotation = applyEdgeResistance(dragStartRotation - distance / spread);
