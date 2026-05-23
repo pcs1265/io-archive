@@ -1,7 +1,7 @@
 :root {
   color: #f4f0e8;
   background: #101010;
-  --card-width: clamp(150px, min(64vw, 38dvh), 360px);
+  --card-width: clamp(165px, min(70vw, 38dvh), 420px);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-drag: cubic-bezier(0.2, 0.8, 0.2, 1);
   font-family:
@@ -80,21 +80,13 @@ h1 {
   cursor: grabbing;
 }
 
-.grid.is-interacting .piece {
-  transition:
-    border-color 160ms ease,
-    box-shadow 220ms ease,
-    opacity 120ms ease,
-    transform 360ms var(--ease-out),
-    background-color 160ms ease;
-}
-
+.grid.is-activating .piece,
 .grid.is-dragging .piece {
   transition:
     border-color 160ms ease,
     box-shadow 220ms ease,
     opacity 120ms ease,
-    transform 90ms var(--ease-drag),
+    transform 220ms var(--ease-out),
     background-color 160ms ease;
 }
 

@@ -3,61 +3,8 @@ const artworks = [
     title: "Night Survey",
     path: "night-survey/",
     description: "An interactive sketch that grows constellation graphs from click or touch input.",
-    accent: "#253a48"
-  },
-  {
-    title: "Night Survey",
-    path: "night-survey/",
-    description: "An interactive sketch that grows constellation graphs from click or touch input.",
-    accent: "#253a48"
-  },
-  {
-    title: "Night Survey",
-    path: "night-survey/",
-    description: "An interactive sketch that grows constellation graphs from click or touch input.",
-    accent: "#253a48"
-  },
-  {
-    title: "Night Survey",
-    path: "night-survey/",
-    description: "An interactive sketch that grows constellation graphs from click or touch input.",
-    accent: "#253a48"
-  },
-  {
-    title: "Night Survey",
-    path: "night-survey/",
-    description: "An interactive sketch that grows constellation graphs from click or touch input.",
-    accent: "#253a48"
-  },
-  {
-    title: "Night Survey",
-    path: "night-survey/",
-    description: "An interactive sketch that grows constellation graphs from click or touch input.",
-    accent: "#253a48"
-  },
-  {
-    title: "Night Survey",
-    path: "night-survey/",
-    description: "An interactive sketch that grows constellation graphs from click or touch input.",
-    accent: "#253a48"
-  },
-  {
-    title: "Night Survey",
-    path: "night-survey/",
-    description: "An interactive sketch that grows constellation graphs from click or touch input.",
-    accent: "#253a48"
-  },
-  {
-    title: "Night Survey",
-    path: "night-survey/",
-    description: "An interactive sketch that grows constellation graphs from click or touch input.",
-    accent: "#253a48"
-  },
-  {
-    title: "Night Survey",
-    path: "night-survey/",
-    description: "An interactive sketch that grows constellation graphs from click or touch input.",
-    accent: "#253a48"
+    thumb: "night-survey/thumb.jpg",
+    accent: "#050817"
   },
 ];
 
@@ -72,15 +19,14 @@ const EDGE_FADE_START = 4.2;
 const EDGE_RESISTANCE = 0.28;
 const SNAP_DURATION = 300;
 const SNAP_DELAY = 130;
-const INTERACTION_END_DELAY = 180;
 const WHEEL_SENSITIVITY = 260;
 const DRAG_THRESHOLD = 6;
 const ENTRANCE_STAGGER = 38;
 const DOCK = {
-  widthRatio: 0.64,
+  widthRatio: 0.7,
   estimatedLiftRatio: 0.11,
   liftRatio: 0.14,
-  minWidth: 150,
+  minWidth: 165,
   maxWidth: 420,
   spreadRatio: 0.34,
   minSpreadRatio: 0.22,
@@ -92,7 +38,7 @@ let rotation = 0;
 let snapFrame = 0;
 let renderFrame = 0;
 let snapTimer = 0;
-let interactionTimer = 0;
+let activationTimer = 0;
 let dragStartX = 0;
 let dragStartRotation = 0;
 let didDrag = false;
@@ -121,9 +67,11 @@ const createArtworkCard = (artwork) => {
     </div>
   `;
 
-  if (artwork.image) {
+  const thumb = artwork.thumb || artwork.image;
+
+  if (thumb) {
     const image = document.createElement("img");
-    image.src = artwork.image;
+    image.src = thumb;
     image.alt = "";
     image.loading = "lazy";
     image.draggable = false;
@@ -256,19 +204,20 @@ if (artworks.length === 0) {
     renderFrame = requestAnimationFrame(render);
   };
 
-  const beginInteraction = () => {
-    clearTimeout(interactionTimer);
-    archive.classList.add("is-interacting");
+  const beginActivation = () => {
+    clearTimeout(activationTimer);
+    archive.classList.add("is-activating");
   };
 
-  const endInteractionSoon = () => {
-    clearTimeout(interactionTimer);
-    interactionTimer = window.setTimeout(() => {
-      archive.classList.remove("is-interacting");
-    }, INTERACTION_END_DELAY);
+  const endActivationSoon = () => {
+    clearTimeout(activationTimer);
+    activationTimer = window.setTimeout(() => {
+      archive.classList.remove("is-activating");
+    }, SNAP_DURATION);
   };
 
   const snapTo = (index) => {
+    beginActivation();
     cancelAnimationFrame(snapFrame);
     cancelAnimationFrame(renderFrame);
     renderFrame = 0;
@@ -291,7 +240,7 @@ if (artworks.length === 0) {
 
       rotation = clampIndex(Math.round(target));
       render();
-      endInteractionSoon();
+      endActivationSoon();
       pieces[selectedIndex].focus({ preventScroll: true });
     };
 
@@ -323,6 +272,7 @@ if (artworks.length === 0) {
     "wheel",
     (event) => {
       event.preventDefault();
+      beginActivation();
       cancelAnimationFrame(snapFrame);
       clearTimeout(snapTimer);
 
@@ -339,7 +289,6 @@ if (artworks.length === 0) {
 
   archive.addEventListener("pointerdown", (event) => {
     event.preventDefault();
-    beginInteraction();
     cancelAnimationFrame(snapFrame);
     clearTimeout(snapTimer);
     archive.classList.add("is-dragging");
@@ -375,6 +324,7 @@ if (artworks.length === 0) {
     } else if (!didDrag && pressedIndex >= 0) {
       snapTo(pressedIndex);
     } else {
+      clearTimeout(snapTimer);
       snapToNearest();
     }
 
