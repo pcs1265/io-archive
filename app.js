@@ -5,6 +5,60 @@ const artworks = [
     description: "An interactive sketch that grows constellation graphs from click or touch input.",
     accent: "#253a48"
   },
+  {
+    title: "Night Survey",
+    path: "night-survey/",
+    description: "An interactive sketch that grows constellation graphs from click or touch input.",
+    accent: "#253a48"
+  },
+  {
+    title: "Night Survey",
+    path: "night-survey/",
+    description: "An interactive sketch that grows constellation graphs from click or touch input.",
+    accent: "#253a48"
+  },
+  {
+    title: "Night Survey",
+    path: "night-survey/",
+    description: "An interactive sketch that grows constellation graphs from click or touch input.",
+    accent: "#253a48"
+  },
+  {
+    title: "Night Survey",
+    path: "night-survey/",
+    description: "An interactive sketch that grows constellation graphs from click or touch input.",
+    accent: "#253a48"
+  },
+  {
+    title: "Night Survey",
+    path: "night-survey/",
+    description: "An interactive sketch that grows constellation graphs from click or touch input.",
+    accent: "#253a48"
+  },
+  {
+    title: "Night Survey",
+    path: "night-survey/",
+    description: "An interactive sketch that grows constellation graphs from click or touch input.",
+    accent: "#253a48"
+  },
+  {
+    title: "Night Survey",
+    path: "night-survey/",
+    description: "An interactive sketch that grows constellation graphs from click or touch input.",
+    accent: "#253a48"
+  },
+  {
+    title: "Night Survey",
+    path: "night-survey/",
+    description: "An interactive sketch that grows constellation graphs from click or touch input.",
+    accent: "#253a48"
+  },
+  {
+    title: "Night Survey",
+    path: "night-survey/",
+    description: "An interactive sketch that grows constellation graphs from click or touch input.",
+    accent: "#253a48"
+  },
 ];
 
 const archive = document.querySelector("#archive");
@@ -78,14 +132,18 @@ if (artworks.length === 0) {
     return index - rotation;
   };
 
+  const getSpread = () => {
+    const cardWidth = pieces[0]?.getBoundingClientRect().width || 220;
+    return Math.min(cardWidth * 0.68, Math.max(cardWidth * 0.48, archive.clientWidth * 0.17));
+  };
+
   const shortestDelta = (from, to) => {
     return clampIndex(to) - from;
   };
 
   const render = () => {
     selectedIndex = clampIndex(Math.round(rotation));
-    const width = archive.clientWidth;
-    const spread = Math.min(220, Math.max(104, width * 0.17));
+    const spread = getSpread();
 
     pieces.forEach((piece, index) => {
       const offset = getOffset(index);
@@ -195,8 +253,7 @@ if (artworks.length === 0) {
       return;
     }
 
-    const width = archive.clientWidth;
-    const spread = Math.min(220, Math.max(104, width * 0.17));
+    const spread = getSpread();
     const distance = event.clientX - dragStartX;
 
     didDrag ||= Math.abs(distance) > 6;
