@@ -200,17 +200,30 @@ h1 {
 @media (max-width: 680px) {
   :root {
     --card-width: clamp(188px, min(66vw, 35dvh), 250px);
-    --card-top: 52%;
+    --card-top: 50%;
   }
 
   main {
-    padding-top: 32px;
+    padding-top: 18px;
   }
 
   header {
     grid-template-columns: 1fr;
     align-items: start;
-    margin-bottom: 24px;
+    gap: 8px;
+    width: min(1120px, calc(100% - 24px));
+    padding-bottom: 12px;
+    margin-bottom: 12px;
+  }
+
+  h1 {
+    font-size: clamp(2rem, 13vw, 3.3rem);
+    line-height: 0.88;
+  }
+
+  .subtitle {
+    font-size: 0.82rem;
+    line-height: 1.35;
   }
 
   .piece {
