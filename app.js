@@ -70,6 +70,8 @@ let dragStartX = 0;
 let dragStartRotation = 0;
 let didDrag = false;
 let pressedIndex = -1;
+let cardWidth = 220;
+let spread = 120;
 
 if (artworks.length === 0) {
   archive.innerHTML = `
@@ -132,9 +134,9 @@ if (artworks.length === 0) {
     return index - rotation;
   };
 
-  const getSpread = () => {
-    const cardWidth = pieces[0]?.getBoundingClientRect().width || 220;
-    return Math.min(cardWidth * 0.68, Math.max(cardWidth * 0.48, archive.clientWidth * 0.17));
+  const updateMeasurements = () => {
+    cardWidth = pieces[0]?.offsetWidth || cardWidth;
+    spread = Math.min(cardWidth * 0.68, Math.max(cardWidth * 0.48, archive.clientWidth * 0.17));
   };
 
   const shortestDelta = (from, to) => {
@@ -143,18 +145,28 @@ if (artworks.length === 0) {
 
   const render = () => {
     selectedIndex = clampIndex(Math.round(rotation));
-    const spread = getSpread();
 
     pieces.forEach((piece, index) => {
       const offset = getOffset(index);
       const distance = Math.abs(offset);
       const visible = distance <= 3;
+
+      if (!visible) {
+        piece.classList.toggle("is-selected", false);
+        piece.tabIndex = -1;
+        piece.style.setProperty("--opacity", 0);
+        piece.style.pointerEvents = "none";
+        piece.style.visibility = "hidden";
+        return;
+      }
+
       const x = offset * spread;
       const y = Math.pow(distance, 1.42) * 38;
       const rotate = offset * 9;
       const scale = Math.max(0.64, 1.12 - distance * 0.15);
-      const opacity = visible ? Math.max(0.18, 1 - distance * 0.22) : 0;
+      const opacity = Math.max(0.18, 1 - distance * 0.22);
 
+      piece.style.visibility = "visible";
       piece.classList.toggle("is-selected", index === selectedIndex);
       piece.tabIndex = index === selectedIndex ? 0 : -1;
       piece.style.setProperty("--x", `${x}px`);
@@ -165,7 +177,7 @@ if (artworks.length === 0) {
       piece.style.setProperty("--z", index === selectedIndex
         ? 100
         : 80 - Math.round(distance * 10));
-      piece.style.pointerEvents = visible ? "auto" : "none";
+      piece.style.pointerEvents = "auto";
     });
   };
 
@@ -253,7 +265,6 @@ if (artworks.length === 0) {
       return;
     }
 
-    const spread = getSpread();
     const distance = event.clientX - dragStartX;
 
     didDrag ||= Math.abs(distance) > 6;
@@ -295,6 +306,10 @@ if (artworks.length === 0) {
     }
   });
 
-  window.addEventListener("resize", render);
+  window.addEventListener("resize", () => {
+    updateMeasurements();
+    render();
+  });
+  updateMeasurements();
   render();
 }
