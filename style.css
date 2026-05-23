@@ -1,8 +1,9 @@
 :root {
   color: #f4f0e8;
   background: #101010;
-  --card-width: clamp(240px, min(40vw, 38dvh), 360px);
-  --card-top: 47%;
+  --card-width: clamp(150px, min(64vw, 38dvh), 360px);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-drag: cubic-bezier(0.2, 0.8, 0.2, 1);
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
     "Segoe UI", sans-serif;
@@ -20,38 +21,37 @@ body {
 body {
   margin: 0;
   overflow-x: clip;
-  /* background:
-    radial-gradient(circle at 16% 18%, rgba(255, 245, 207, 0.12), transparent 28rem),
-    radial-gradient(circle at 82% 22%, rgba(93, 168, 255, 0.12), transparent 24rem),
-    linear-gradient(145deg, #101010 0%, #181818 48%, #111 100%); */
 }
 
 main {
+  position: relative;
   width: 100%;
   height: 100dvh;
   min-height: 100dvh;
   margin: 0 auto;
-  padding: 56px 0 0;
+  padding: clamp(14px, 4vw, 32px) 0 0;
   display: flex;
   flex-direction: column;
   gap: 0;
 }
 
 header {
+  position: relative;
+  z-index: 1;
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
   align-items: end;
-  gap: 24px;
-  width: min(1120px, calc(100% - 32px));
+  gap: clamp(8px, 2vw, 24px);
+  width: min(1120px, calc(100% - clamp(24px, 4vw, 32px)));
   margin: 0 auto;
-  padding-bottom: 20px;
-  margin-bottom: 36px;
+  padding-bottom: clamp(8px, 1.5vw, 12px);
+  margin-bottom: clamp(8px, 2vw, 18px);
   border-bottom: 1px solid rgba(244, 240, 232, 0.18);
 }
 
 h1 {
   margin: 0;
-  font-size: clamp(2.75rem, 7vw, 6.75rem);
+  font-size: clamp(1.8rem, 5.4vw, 5rem);
   line-height: 0.9;
   letter-spacing: 0;
   font-weight: 780;
@@ -61,8 +61,8 @@ h1 {
   max-width: 24rem;
   margin: 0;
   color: rgba(244, 240, 232, 0.66);
-  font-size: 0.95rem;
-  line-height: 1.55;
+  font-size: clamp(0.76rem, 1.5vw, 0.84rem);
+  line-height: 1.35;
 }
 
 .grid {
@@ -85,12 +85,22 @@ h1 {
     border-color 160ms ease,
     box-shadow 220ms ease,
     opacity 120ms ease,
+    transform 360ms var(--ease-out),
+    background-color 160ms ease;
+}
+
+.grid.is-dragging .piece {
+  transition:
+    border-color 160ms ease,
+    box-shadow 220ms ease,
+    opacity 120ms ease,
+    transform 90ms var(--ease-drag),
     background-color 160ms ease;
 }
 
 .piece {
   position: absolute;
-  top: var(--card-top);
+  bottom: clamp(18px, 4dvh, 42px);
   left: 50%;
   z-index: var(--z, 1);
   width: var(--card-width);
@@ -107,30 +117,30 @@ h1 {
   display: grid;
   grid-template-rows: 1.58fr 1fr;
   gap: 16px;
-  padding: 16px;
+  padding: clamp(14px, 2vw, 16px);
   opacity: var(--opacity, 0);
   transform:
-    translate(-50%, -50%)
+    translate(-50%, 0)
     translate(var(--x, 0), var(--y, 0))
     rotate(var(--rotate, 0deg))
     scale(var(--scale, 0.82));
-  transform-origin: center;
+  transform-origin: center bottom;
   -webkit-user-drag: none;
   transition:
     border-color 160ms ease,
     box-shadow 220ms ease,
     opacity 360ms ease,
-    transform 520ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 520ms var(--ease-out),
     background-color 160ms ease;
 }
 
 .piece.is-entering {
   opacity: 0;
   transform:
-    translate(-50%, -50%)
-    translate(var(--x, 0), calc(var(--y, 0px) + 48dvh))
+    translate(-50%, 0)
+    translate(var(--x, 0), 0)
     rotate(var(--rotate, 0deg))
-    scale(0.12);
+    scale(0.08);
 }
 
 .piece,
@@ -140,7 +150,7 @@ h1 {
 
 .piece.is-selected {
   border-color: rgba(244, 240, 232, 0.58);
-  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.32);
+  box-shadow: 0 clamp(14px, 3vw, 26px) clamp(32px, 8vw, 80px) rgba(0, 0, 0, 0.42);
 }
 
 .piece:hover,
@@ -204,51 +214,4 @@ h1 {
   color: rgba(244, 240, 232, 0.62);
   text-align: center;
   line-height: 1.5;
-}
-
-@media (max-width: 680px) {
-  :root {
-    --card-width: clamp(188px, min(66vw, 35dvh), 250px);
-    --card-top: 45%;
-  }
-
-  main {
-    padding-top: 18px;
-  }
-
-  header {
-    grid-template-columns: 1fr;
-    align-items: start;
-    gap: 8px;
-    width: min(1120px, calc(100% - 24px));
-    padding-bottom: 12px;
-    margin-bottom: 12px;
-  }
-
-  h1 {
-    font-size: clamp(2rem, 13vw, 3.3rem);
-    line-height: 0.88;
-  }
-
-  .subtitle {
-    font-size: 0.82rem;
-    line-height: 1.35;
-  }
-
-  .piece {
-    padding: 14px;
-    border-radius: 18px;
-    transition:
-      border-color 120ms ease,
-      opacity 120ms ease,
-      transform 460ms cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  .piece.is-selected {
-    box-shadow: 0 14px 32px rgba(0, 0, 0, 0.26);
-  }
-
-  .piece-preview {
-    border-radius: 12px;
-  }
 }

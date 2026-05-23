@@ -62,6 +62,31 @@ const artworks = [
 ];
 
 const archive = document.querySelector("#archive");
+const root = document.documentElement;
+const CARD_ASPECT_RATIO = 1.58;
+const SELECTED_SCALE = 1.08;
+const INACTIVE_SCALE = 0.44;
+const INACTIVE_SCALE_FALLOFF = 0.018;
+const VISIBLE_DISTANCE = 5;
+const EDGE_FADE_START = 4.2;
+const EDGE_RESISTANCE = 0.28;
+const SNAP_DURATION = 300;
+const SNAP_DELAY = 130;
+const INTERACTION_END_DELAY = 180;
+const WHEEL_SENSITIVITY = 260;
+const DRAG_THRESHOLD = 6;
+const ENTRANCE_STAGGER = 38;
+const DOCK = {
+  widthRatio: 0.64,
+  estimatedLiftRatio: 0.11,
+  liftRatio: 0.14,
+  minWidth: 150,
+  maxWidth: 420,
+  spreadRatio: 0.34,
+  minSpreadRatio: 0.22,
+  viewportSpreadRatio: 0.08
+};
+
 let selectedIndex = 0;
 let rotation = 0;
 let snapFrame = 0;
@@ -74,7 +99,42 @@ let didDrag = false;
 let pressedIndex = -1;
 let cardWidth = 220;
 let spread = 120;
-let isMobileLayout = false;
+let dockLift = 140;
+
+const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+const clampIndex = (value) => clamp(value, 0, artworks.length - 1);
+
+const createArtworkCard = (artwork) => {
+  const link = document.createElement("a");
+  link.className = "piece is-entering";
+  link.href = artwork.path;
+  link.draggable = false;
+  link.style.setProperty("--accent", artwork.accent || "#243b3f");
+  link.innerHTML = `
+    <div class="piece-preview" aria-hidden="true"></div>
+    <div class="piece-body">
+      <div>
+        <h2 class="piece-title"></h2>
+        <p class="piece-meta"></p>
+      </div>
+      <span class="piece-path"></span>
+    </div>
+  `;
+
+  if (artwork.image) {
+    const image = document.createElement("img");
+    image.src = artwork.image;
+    image.alt = "";
+    image.loading = "lazy";
+    image.draggable = false;
+    link.querySelector(".piece-preview").append(image);
+  }
+
+  link.querySelector(".piece-title").textContent = artwork.title;
+  link.querySelector(".piece-meta").textContent = artwork.description;
+  link.querySelector(".piece-path").textContent = artwork.path;
+  return link;
+};
 
 if (artworks.length === 0) {
   archive.innerHTML = `
@@ -83,51 +143,18 @@ if (artworks.length === 0) {
     </div>
   `;
 } else {
-  archive.replaceChildren(
-    ...artworks.map((artwork) => {
-      const link = document.createElement("a");
-      link.className = "piece is-entering";
-      link.href = artwork.path;
-      link.draggable = false;
-      link.style.setProperty("--accent", artwork.accent || "#243b3f");
-      link.innerHTML = `
-        <div class="piece-preview" aria-hidden="true"></div>
-        <div class="piece-body">
-          <div>
-            <h2 class="piece-title"></h2>
-            <p class="piece-meta"></p>
-          </div>
-          <span class="piece-path"></span>
-        </div>
-      `;
-
-      if (artwork.image) {
-        const image = document.createElement("img");
-        image.src = artwork.image;
-        image.alt = "";
-        image.loading = "lazy";
-        image.draggable = false;
-        link.querySelector(".piece-preview").append(image);
-      }
-
-      link.querySelector(".piece-title").textContent = artwork.title;
-      link.querySelector(".piece-meta").textContent = artwork.description;
-      link.querySelector(".piece-path").textContent = artwork.path;
-      return link;
-    })
-  );
+  archive.replaceChildren(...artworks.map(createArtworkCard));
 
   const pieces = [...archive.querySelectorAll(".piece")];
   const count = pieces.length;
 
-  const clampIndex = (value) => Math.min(Math.max(value, 0), count - 1);
   const applyEdgeResistance = (value) => {
     if (value < 0) {
-      return value * 0.28;
+      return value * EDGE_RESISTANCE;
     }
 
     if (value > count - 1) {
-      return count - 1 + (value - (count - 1)) * 0.28;
+      return count - 1 + (value - (count - 1)) * EDGE_RESISTANCE;
     }
 
     return value;
@@ -138,11 +165,37 @@ if (artworks.length === 0) {
   };
 
   const updateMeasurements = () => {
-    cardWidth = pieces[0]?.offsetWidth || cardWidth;
-    isMobileLayout = window.matchMedia("(max-width: 680px)").matches;
-    spread = isMobileLayout
-      ? Math.min(cardWidth * 0.62, Math.max(cardWidth * 0.42, archive.clientHeight * 0.13))
-      : Math.min(cardWidth * 0.68, Math.max(cardWidth * 0.48, archive.clientWidth * 0.17));
+    const bottomGap = clamp(archive.clientHeight * 0.04, 18, 42);
+    const widthLimit = archive.clientWidth * DOCK.widthRatio;
+    const estimatedLift = archive.clientHeight * DOCK.estimatedLiftRatio;
+    const heightLimit =
+      (archive.clientHeight - bottomGap - estimatedLift - 18) /
+      (CARD_ASPECT_RATIO * SELECTED_SCALE);
+
+    cardWidth = Math.round(clamp(
+      Math.min(widthLimit, heightLimit),
+      DOCK.minWidth,
+      DOCK.maxWidth
+    ));
+    root.style.setProperty("--card-width", `${cardWidth}px`);
+
+    const activeHeight = cardWidth * CARD_ASPECT_RATIO * SELECTED_SCALE;
+    const availableLift = Math.max(
+      0,
+      archive.clientHeight - bottomGap - activeHeight - 18
+    );
+    dockLift = Math.round(Math.min(
+      archive.clientHeight * DOCK.liftRatio,
+      Math.max(Math.min(44, availableLift), availableLift * 0.72)
+    ));
+
+    spread = Math.min(
+      cardWidth * DOCK.spreadRatio,
+      Math.max(
+        cardWidth * DOCK.minSpreadRatio,
+        archive.clientWidth * DOCK.viewportSpreadRatio
+      )
+    );
   };
 
   const shortestDelta = (from, to) => {
@@ -156,7 +209,7 @@ if (artworks.length === 0) {
     pieces.forEach((piece, index) => {
       const offset = getOffset(index);
       const distance = Math.abs(offset);
-      const visible = distance <= 3;
+      const visible = distance <= VISIBLE_DISTANCE;
 
       if (!visible) {
         piece.classList.toggle("is-selected", false);
@@ -167,27 +220,28 @@ if (artworks.length === 0) {
         return;
       }
 
-      const x = isMobileLayout
-        ? 0
-        : offset * spread;
-      const y = isMobileLayout
-        ? offset * spread
-        : Math.pow(distance, 1.42) * 38;
-      const rotate = isMobileLayout ? 0 : offset * 9;
-      const scale = Math.max(0.64, 1.12 - distance * 0.15);
-      const baseOpacity = Math.max(0.18, 1 - distance * 0.22);
-      const edgeFade = distance > 2.4 ? Math.max(0, (3 - distance) / 0.6) : 1;
+      const x = offset * spread;
+      const isSelected = index === selectedIndex;
+      const y = isSelected ? -dockLift : 0;
+      const rotate = offset * 5;
+      const scale = isSelected
+        ? SELECTED_SCALE
+        : Math.max(0.3, INACTIVE_SCALE - distance * INACTIVE_SCALE_FALLOFF);
+      const baseOpacity = isSelected ? 1 : Math.max(0.42, 0.76 - distance * 0.08);
+      const edgeFade = distance > EDGE_FADE_START
+        ? Math.max(0, (VISIBLE_DISTANCE - distance) / 0.8)
+        : 1;
       const opacity = baseOpacity * edgeFade;
 
       piece.style.visibility = "visible";
-      piece.classList.toggle("is-selected", index === selectedIndex);
-      piece.tabIndex = index === selectedIndex ? 0 : -1;
+      piece.classList.toggle("is-selected", isSelected);
+      piece.tabIndex = isSelected ? 0 : -1;
       piece.style.setProperty("--x", `${x}px`);
       piece.style.setProperty("--y", `${y}px`);
       piece.style.setProperty("--rotate", `${rotate}deg`);
       piece.style.setProperty("--scale", scale);
       piece.style.setProperty("--opacity", opacity);
-      piece.style.setProperty("--z", index === selectedIndex
+      piece.style.setProperty("--z", isSelected
         ? 100
         : 80 - Math.round(distance * 10));
       piece.style.pointerEvents = "auto";
@@ -211,7 +265,7 @@ if (artworks.length === 0) {
     clearTimeout(interactionTimer);
     interactionTimer = window.setTimeout(() => {
       archive.classList.remove("is-interacting");
-    }, 180);
+    }, INTERACTION_END_DELAY);
   };
 
   const snapTo = (index) => {
@@ -221,11 +275,10 @@ if (artworks.length === 0) {
 
     const start = rotation;
     const target = start + shortestDelta(start, index);
-    const duration = 300;
     const startedAt = performance.now();
 
     const tick = (now) => {
-      const progress = Math.min((now - startedAt) / duration, 1);
+      const progress = Math.min((now - startedAt) / SNAP_DURATION, 1);
       const eased = 1 - Math.pow(1 - progress, 3);
 
       rotation = start + (target - start) * eased;
@@ -277,9 +330,9 @@ if (artworks.length === 0) {
         ? event.deltaX
         : event.deltaY;
 
-      rotation = applyEdgeResistance(rotation + delta / 260);
+      rotation = applyEdgeResistance(rotation + delta / WHEEL_SENSITIVITY);
       scheduleRender();
-      snapTimer = window.setTimeout(snapToNearest, 130);
+      snapTimer = window.setTimeout(snapToNearest, SNAP_DELAY);
     },
     { passive: false }
   );
@@ -291,7 +344,7 @@ if (artworks.length === 0) {
     clearTimeout(snapTimer);
     archive.classList.add("is-dragging");
     archive.setPointerCapture(event.pointerId);
-    dragStartX = isMobileLayout ? event.clientY : event.clientX;
+    dragStartX = event.clientX;
     dragStartRotation = rotation;
     didDrag = false;
     pressedIndex = pieces.indexOf(event.target.closest(".piece"));
@@ -302,11 +355,9 @@ if (artworks.length === 0) {
       return;
     }
 
-    const distance = isMobileLayout
-      ? event.clientY - dragStartX
-      : event.clientX - dragStartX;
+    const distance = event.clientX - dragStartX;
 
-    didDrag ||= Math.abs(distance) > 6;
+    didDrag ||= Math.abs(distance) > DRAG_THRESHOLD;
     rotation = applyEdgeResistance(dragStartRotation - distance / spread);
     scheduleRender();
   });
@@ -356,7 +407,7 @@ if (artworks.length === 0) {
     pieces.forEach((piece, index) => {
       window.setTimeout(() => {
         piece.classList.remove("is-entering");
-      }, index * 38);
+      }, index * ENTRANCE_STAGGER);
     });
   });
 }
