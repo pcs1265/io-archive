@@ -86,7 +86,7 @@ if (artworks.length === 0) {
   archive.replaceChildren(
     ...artworks.map((artwork) => {
       const link = document.createElement("a");
-      link.className = "piece";
+      link.className = "piece is-entering";
       link.href = artwork.path;
       link.draggable = false;
       link.style.setProperty("--accent", artwork.accent || "#243b3f");
@@ -351,4 +351,12 @@ if (artworks.length === 0) {
   });
   updateMeasurements();
   render();
+
+  requestAnimationFrame(() => {
+    pieces.forEach((piece, index) => {
+      window.setTimeout(() => {
+        piece.classList.remove("is-entering");
+      }, index * 38);
+    });
+  });
 }

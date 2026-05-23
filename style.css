@@ -119,9 +119,18 @@ h1 {
   transition:
     border-color 160ms ease,
     box-shadow 220ms ease,
-    opacity 80ms ease,
-    transform 320ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 360ms ease,
+    transform 520ms cubic-bezier(0.16, 1, 0.3, 1),
     background-color 160ms ease;
+}
+
+.piece.is-entering {
+  opacity: 0;
+  transform:
+    translate(-50%, -50%)
+    translate(var(--x, 0), calc(var(--y, 0px) + 48dvh))
+    rotate(var(--rotate, 0deg))
+    scale(0.12);
 }
 
 .piece,
@@ -232,7 +241,7 @@ h1 {
     transition:
       border-color 120ms ease,
       opacity 120ms ease,
-      transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+      transform 460ms cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   .piece.is-selected {
