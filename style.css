@@ -80,7 +80,7 @@ h1 {
   cursor: grabbing;
 }
 
-.grid.is-dragging .piece {
+.grid.is-interacting .piece {
   transition:
     border-color 160ms ease,
     box-shadow 220ms ease,

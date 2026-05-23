@@ -65,7 +65,9 @@ const archive = document.querySelector("#archive");
 let selectedIndex = 0;
 let rotation = 0;
 let snapFrame = 0;
+let renderFrame = 0;
 let snapTimer = 0;
+let interactionTimer = 0;
 let dragStartX = 0;
 let dragStartRotation = 0;
 let didDrag = false;
@@ -148,6 +150,7 @@ if (artworks.length === 0) {
   };
 
   const render = () => {
+    renderFrame = 0;
     selectedIndex = clampIndex(Math.round(rotation));
 
     pieces.forEach((piece, index) => {
@@ -191,8 +194,30 @@ if (artworks.length === 0) {
     });
   };
 
+  const scheduleRender = () => {
+    if (renderFrame) {
+      return;
+    }
+
+    renderFrame = requestAnimationFrame(render);
+  };
+
+  const beginInteraction = () => {
+    clearTimeout(interactionTimer);
+    archive.classList.add("is-interacting");
+  };
+
+  const endInteractionSoon = () => {
+    clearTimeout(interactionTimer);
+    interactionTimer = window.setTimeout(() => {
+      archive.classList.remove("is-interacting");
+    }, 180);
+  };
+
   const snapTo = (index) => {
     cancelAnimationFrame(snapFrame);
+    cancelAnimationFrame(renderFrame);
+    renderFrame = 0;
 
     const start = rotation;
     const target = start + shortestDelta(start, index);
@@ -213,6 +238,7 @@ if (artworks.length === 0) {
 
       rotation = clampIndex(Math.round(target));
       render();
+      endInteractionSoon();
       pieces[selectedIndex].focus({ preventScroll: true });
     };
 
@@ -252,7 +278,7 @@ if (artworks.length === 0) {
         : event.deltaY;
 
       rotation = applyEdgeResistance(rotation + delta / 260);
-      render();
+      scheduleRender();
       snapTimer = window.setTimeout(snapToNearest, 130);
     },
     { passive: false }
@@ -260,6 +286,7 @@ if (artworks.length === 0) {
 
   archive.addEventListener("pointerdown", (event) => {
     event.preventDefault();
+    beginInteraction();
     cancelAnimationFrame(snapFrame);
     clearTimeout(snapTimer);
     archive.classList.add("is-dragging");
@@ -281,7 +308,7 @@ if (artworks.length === 0) {
 
     didDrag ||= Math.abs(distance) > 6;
     rotation = applyEdgeResistance(dragStartRotation - distance / spread);
-    render();
+    scheduleRender();
   });
 
   const finishDrag = (event) => {
@@ -320,7 +347,7 @@ if (artworks.length === 0) {
 
   window.addEventListener("resize", () => {
     updateMeasurements();
-    render();
+    scheduleRender();
   });
   updateMeasurements();
   render();
