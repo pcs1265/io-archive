@@ -22,6 +22,7 @@ const BFS_REACH_SCALE = 0.42;
 const BASE_POINT_COUNT = 700;
 const BASE_REACH = 150;
 const BASE_AREA = 1440 * 900;
+const MAX_PIXEL_RATIO = 4;
 const MAX_BRANCHES_PER_POINT = 2;
 const OUTWARD_STEP = 6;
 const DISCOVERY_KEEP_RATE = 0.68;
@@ -31,16 +32,18 @@ const STAR_LINE_GAP = 7;
 const DISCOVERY_SHINE_ENERGY = 1.35;
 const DISCOVERY_VIBRATION_MS = 5;
 const DISCOVERY_VIBRATION_INTERVAL = 300;
-const ARCHIVE_FADE_DURATION = 6400;
+const ARCHIVE_FADE_DURATION = 7000;
+const ARCHIVE_SETTLE_DURATION = 1000;
+const GROWTH_RELEASE_FADE_DURATION = 300;
 
 function resize() {
-  state.pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+  state.pixelRatio = Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO);
   const rect = canvas.getBoundingClientRect();
   state.width = rect.width || window.innerWidth;
   state.height = rect.height || window.innerHeight;
 
-  canvas.width = Math.floor(state.width * state.pixelRatio);
-  canvas.height = Math.floor(state.height * state.pixelRatio);
+  canvas.width = Math.ceil(state.width * state.pixelRatio);
+  canvas.height = Math.ceil(state.height * state.pixelRatio);
   ctx.setTransform(state.pixelRatio, 0, 0, state.pixelRatio, 0, 0);
 
   seedPoints();
@@ -169,6 +172,7 @@ function startGraphGrowth(position) {
     pendingEdges: [],
     edgeKeys: new Set(),
     elapsed: 0,
+    releaseElapsed: 0,
   };
   state.pulses.push({
     x: origin.x,
@@ -181,17 +185,30 @@ function startGraphGrowth(position) {
 function archiveCurrentConstellation() {
   const activePoints = state.points
     .filter((point) => point.active)
-    .map((point) => ({
-      x: point.x,
-      y: point.y,
-      radius: point.radius,
-      energy: point.energy,
-    }));
-  const edges = state.edges.map((edge) => ({
-    from: { x: edge.from.x, y: edge.from.y },
-    to: { x: edge.to.x, y: edge.to.y },
-    progress: Math.min(Math.max((edge.age - edge.delay) / LINE_DRAW_DURATION, 0), 1),
-  }));
+    .map((point) => {
+      const visual = getPointVisual(point);
+
+      return {
+        x: point.x,
+        y: point.y,
+        radius: visual.radius,
+        archiveRadius: point.radius * 0.8,
+        alpha: visual.alpha,
+        haloAlpha: visual.haloAlpha,
+        haloRadius: visual.haloRadius,
+      };
+    });
+  const edges = state.edges.map((edge) => {
+    const visual = getEdgeVisual(edge);
+
+    return {
+      from: { x: edge.from.x, y: edge.from.y },
+      to: { x: edge.to.x, y: edge.to.y },
+      progress: visual.progress,
+      alpha: visual.alpha,
+      lineWidth: visual.lineWidth,
+    };
+  }).filter((edge) => edge.progress > 0);
 
   if (activePoints.length === 0 && edges.length === 0) {
     return;
@@ -207,8 +224,9 @@ function archiveCurrentConstellation() {
 }
 
 function stopGraphGrowth() {
-  if (state.growth) {
+  if (state.growth?.active) {
     state.growth.active = false;
+    state.growth.releaseElapsed = 0;
   }
 }
 
@@ -425,6 +443,10 @@ function update(delta) {
   updatePoints();
   growGraph(delta);
 
+  if (state.growth && !state.growth.active) {
+    state.growth.releaseElapsed += delta;
+  }
+
   state.constellations = state.constellations
     .map((constellation) => ({ ...constellation, age: constellation.age + delta }))
     .filter((constellation) => constellation.age < constellation.life);
@@ -501,17 +523,13 @@ function drawEdges() {
   drawArchivedConstellations();
 
   state.edges.forEach((edge) => {
-    const activeAge = edge.age - edge.delay;
+    const visual = getEdgeVisual(edge);
 
-    if (activeAge <= 0) {
+    if (visual.progress <= 0) {
       return;
     }
 
-    const appear = Math.min(activeAge / 420, 1);
-    const fade = Math.max(1 - activeAge / edge.life, 0);
-    const progress = Math.min(activeAge / LINE_DRAW_DURATION, 1);
-    const alpha = appear * fade;
-    const segment = insetLineSegment(edge.from, edge.to, progress);
+    const segment = insetLineSegment(edge.from, edge.to, visual.progress);
 
     if (!segment) {
       return;
@@ -520,8 +538,8 @@ function drawEdges() {
     ctx.beginPath();
     ctx.moveTo(segment.fromX, segment.fromY);
     ctx.lineTo(segment.toX, segment.toY);
-    ctx.strokeStyle = `rgba(178, 201, 255, ${0.1 + alpha * 0.34})`;
-    ctx.lineWidth = 0.55 + alpha * 0.7;
+    ctx.strokeStyle = `rgba(178, 201, 255, ${visual.alpha})`;
+    ctx.lineWidth = visual.lineWidth;
     ctx.stroke();
 
   });
@@ -530,6 +548,7 @@ function drawEdges() {
 function drawArchivedConstellations() {
   state.constellations.forEach((constellation) => {
     const fade = Math.max(1 - constellation.age / constellation.life, 0);
+    const settle = easeOutCubic(clamp(constellation.age / ARCHIVE_SETTLE_DURATION, 0, 1));
 
     constellation.edges.forEach((edge) => {
       const segment = insetLineSegment(edge.from, edge.to, edge.progress);
@@ -541,18 +560,71 @@ function drawArchivedConstellations() {
       ctx.beginPath();
       ctx.moveTo(segment.fromX, segment.fromY);
       ctx.lineTo(segment.toX, segment.toY);
-      ctx.strokeStyle = `rgba(178, 201, 255, ${fade * 0.16})`;
-      ctx.lineWidth = 0.55;
+      ctx.strokeStyle = `rgba(178, 201, 255, ${lerp(edge.alpha, 0.16, settle) * fade})`;
+      ctx.lineWidth = lerp(edge.lineWidth, 0.55, settle);
       ctx.stroke();
     });
 
     constellation.points.forEach((point) => {
+      const alpha = lerp(point.alpha, 0.34, settle) * fade;
+      const radius = lerp(point.radius, point.archiveRadius, settle);
+      const haloAlpha = point.haloAlpha * Math.max(1 - settle, 0) * fade;
+
       ctx.beginPath();
-      ctx.arc(point.x, point.y, point.radius * 0.8, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(244, 247, 255, ${fade * 0.34})`;
+      ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(244, 247, 255, ${alpha})`;
       ctx.fill();
+
+      if (haloAlpha > 0.001) {
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, point.haloRadius, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(178, 201, 255, ${haloAlpha})`;
+        ctx.fill();
+      }
     });
   });
+}
+
+function getEdgeVisual(edge) {
+  const activeAge = edge.age - edge.delay;
+
+  if (activeAge <= 0) {
+    return {
+      progress: 0,
+      alpha: 0,
+      lineWidth: 0.55,
+    };
+  }
+
+  const appear = Math.min(activeAge / 420, 1);
+  const fade = Math.max(1 - activeAge / edge.life, 0);
+  const strength = appear * fade;
+
+  return {
+    progress: Math.min(activeAge / LINE_DRAW_DURATION, 1),
+    alpha: 0.1 + strength * 0.34,
+    lineWidth: 0.55 + strength * 0.7,
+  };
+}
+
+function getPointVisual(point) {
+  const alpha = Math.min(0.66 + point.energy * 0.22, 1);
+  const radius = point.radius * 0.82 + point.energy * 0.45;
+
+  return {
+    alpha,
+    radius,
+    haloAlpha: point.energy > 0.2 ? point.energy * 0.035 : 0,
+    haloRadius: radius * 3.4,
+  };
+}
+
+function lerp(from, to, amount) {
+  return from + (to - from) * amount;
+}
+
+function easeOutCubic(value) {
+  return 1 - Math.pow(1 - value, 3);
 }
 
 function insetLineSegment(from, to, progress = 1) {
@@ -583,32 +655,45 @@ function drawPoints() {
       return;
     }
 
-    const alpha = Math.min(0.66 + point.energy * 0.22, 1);
-    const radius = point.radius * 0.82 + point.energy * 0.45;
+    const visual = getPointVisual(point);
 
     ctx.beginPath();
-    ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(244, 247, 255, ${alpha})`;
+    ctx.arc(point.x, point.y, visual.radius, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(244, 247, 255, ${visual.alpha})`;
     ctx.fill();
 
-    if (point.energy > 0.2) {
+    if (visual.haloAlpha > 0) {
       ctx.beginPath();
-      ctx.arc(point.x, point.y, radius * 3.4, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(178, 201, 255, ${point.energy * 0.035})`;
+      ctx.arc(point.x, point.y, visual.haloRadius, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(178, 201, 255, ${visual.haloAlpha})`;
       ctx.fill();
     }
   });
 
   if (state.growth) {
     const origin = state.growth.origin;
-    const pulse = state.growth.active ? 1 + Math.sin(performance.now() * 0.01) * 0.18 : 1;
+    const release = getGrowthRelease();
+    const pulse = 1 + Math.sin(performance.now() * 0.01) * 0.18 * release;
+    const alpha = lerp(0.28, 0.72, release);
 
     ctx.beginPath();
     ctx.arc(origin.x, origin.y, 7 * pulse, 0, Math.PI * 2);
-    ctx.strokeStyle = state.growth.active ? "rgba(247, 217, 141, 0.72)" : "rgba(247, 217, 141, 0.28)";
+    ctx.strokeStyle = `rgba(247, 217, 141, ${alpha})`;
     ctx.lineWidth = 1.2;
     ctx.stroke();
   }
+}
+
+function getGrowthRelease() {
+  if (!state.growth) {
+    return 0;
+  }
+
+  if (state.growth.active) {
+    return 1;
+  }
+
+  return Math.max(1 - state.growth.releaseElapsed / GROWTH_RELEASE_FADE_DURATION, 0);
 }
 
 function drawPulses() {
@@ -626,13 +711,15 @@ function drawPointerHint() {
     return;
   }
 
-  if (state.growth?.active) {
+  const release = getGrowthRelease();
+
+  if (state.growth && release > 0) {
     const origin = state.growth.origin;
 
     ctx.beginPath();
     ctx.moveTo(state.pointer.x, state.pointer.y);
     ctx.lineTo(origin.x, origin.y);
-    ctx.strokeStyle = "rgba(217, 226, 255, 0.2)";
+    ctx.strokeStyle = `rgba(217, 226, 255, ${0.2 * release})`;
     ctx.lineWidth = 0.7;
     ctx.stroke();
   }
