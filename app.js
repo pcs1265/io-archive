@@ -57,6 +57,8 @@ let didDrag = false;
 let pressedIndex = -1;
 let cardWidth = 220;
 let spread = 120;
+let outerSpread = 72;
+let dragSpread = 96;
 let dockLift = 140;
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
@@ -137,6 +139,39 @@ if (artworks.length === 0) {
     return (DOCK.denseAtCount - count) / (DOCK.denseAtCount - 2);
   };
 
+  const getSpread = (sparseFactor) => {
+    const spreadRatio = lerp(DOCK.denseSpreadRatio, DOCK.sparseSpreadRatio, sparseFactor);
+    const minSpreadRatio = lerp(DOCK.denseMinSpreadRatio, DOCK.sparseMinSpreadRatio, sparseFactor);
+    const viewportSpreadRatio = lerp(
+      DOCK.denseViewportSpreadRatio,
+      DOCK.sparseViewportSpreadRatio,
+      sparseFactor
+    );
+
+    return Math.min(
+      cardWidth * spreadRatio,
+      Math.max(
+        cardWidth * minSpreadRatio,
+        archive.clientWidth * viewportSpreadRatio
+      )
+    );
+  };
+
+  const getOffsetX = (offset) => {
+    const distance = Math.abs(offset);
+    const direction = Math.sign(offset);
+
+    if (distance <= 1) {
+      const easedDistance = distance * distance * (3 - 2 * distance);
+      return direction * (
+        outerSpread * distance +
+        (spread - outerSpread) * easedDistance
+      );
+    }
+
+    return direction * (spread + (distance - 1) * outerSpread);
+  };
+
   const updateMeasurements = () => {
     const bottomGap = clamp(archive.clientHeight * 0.04, 18, 42);
     const widthLimit = archive.clientWidth * DOCK.widthRatio;
@@ -162,22 +197,9 @@ if (artworks.length === 0) {
       Math.max(Math.min(44, availableLift), availableLift * 0.72)
     ));
 
-    const sparseFactor = getSparseFactor();
-    const spreadRatio = lerp(DOCK.denseSpreadRatio, DOCK.sparseSpreadRatio, sparseFactor);
-    const minSpreadRatio = lerp(DOCK.denseMinSpreadRatio, DOCK.sparseMinSpreadRatio, sparseFactor);
-    const viewportSpreadRatio = lerp(
-      DOCK.denseViewportSpreadRatio,
-      DOCK.sparseViewportSpreadRatio,
-      sparseFactor
-    );
-
-    spread = Math.min(
-      cardWidth * spreadRatio,
-      Math.max(
-        cardWidth * minSpreadRatio,
-        archive.clientWidth * viewportSpreadRatio
-      )
-    );
+    spread = getSpread(1);
+    outerSpread = getSpread(getSparseFactor());
+    dragSpread = lerp(outerSpread, spread, 0.5);
   };
 
   const shortestDelta = (from, to) => {
@@ -206,7 +228,7 @@ if (artworks.length === 0) {
         return;
       }
 
-      const x = offset * spread;
+      const x = getOffsetX(offset);
       const isSelected = index === selectedIndex;
       const y = isSelected ? -dockLift : 0;
       const rotate = offset * 5;
@@ -345,7 +367,7 @@ if (artworks.length === 0) {
     const distance = event.clientX - dragStartX;
 
     didDrag ||= Math.abs(distance) > DRAG_THRESHOLD;
-    rotation = applyEdgeResistance(dragStartRotation - distance / spread);
+    rotation = applyEdgeResistance(dragStartRotation - distance / dragSpread);
     scheduleRender();
   });
 
