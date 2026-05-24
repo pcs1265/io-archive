@@ -101,15 +101,19 @@ h1 {
   will-change: transform, opacity;
   color: inherit;
   text-decoration: none;
+  --card-radius: clamp(14px, calc(var(--card-width) * 0.057), 24px);
+  --preview-radius: clamp(10px, calc(var(--card-width) * 0.038), 16px);
+  --card-padding: clamp(10px, calc(var(--card-width) * 0.038), 16px);
+  --card-gap: clamp(10px, calc(var(--card-width) * 0.038), 16px);
   border: 1px solid rgba(244, 240, 232, 0.16);
-  border-radius: 24px;
+  border-radius: var(--card-radius);
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
     var(--accent, #243b3f);
   display: grid;
   grid-template-rows: 1.58fr 1fr;
-  gap: 16px;
-  padding: clamp(14px, 2vw, 16px);
+  gap: var(--card-gap);
+  padding: var(--card-padding);
   opacity: var(--opacity, 0);
   transform:
     translate(-50%, 0)
@@ -154,7 +158,7 @@ h1 {
 .piece-preview {
   min-height: 0;
   overflow: hidden;
-  border-radius: 16px;
+  border-radius: var(--preview-radius);
   background:
     radial-gradient(circle at 28% 24%, rgba(244, 240, 232, 0.22), transparent 34%),
     linear-gradient(135deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.03)),
