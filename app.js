@@ -19,7 +19,8 @@ const archive = document.querySelector("#archive");
 const root = document.documentElement;
 const CARD_ASPECT_RATIO = 1.58;
 const SELECTED_SCALE = 1.08;
-const INACTIVE_SCALE = 0.44;
+const DENSE_INACTIVE_SCALE = 0.44;
+const SPARSE_INACTIVE_SCALE = 0.52;
 const INACTIVE_SCALE_FALLOFF = 0.018;
 const VISIBLE_DISTANCE = 5;
 const EDGE_FADE_START = 4.2;
@@ -35,9 +36,13 @@ const DOCK = {
   liftRatio: 0.14,
   minWidth: 165,
   maxWidth: 420,
-  spreadRatio: 0.34,
-  minSpreadRatio: 0.22,
-  viewportSpreadRatio: 0.08
+  denseSpreadRatio: 0.34,
+  sparseSpreadRatio: 0.66,
+  denseMinSpreadRatio: 0.22,
+  sparseMinSpreadRatio: 0.46,
+  denseViewportSpreadRatio: 0.08,
+  sparseViewportSpreadRatio: 0.15,
+  denseAtCount: 6
 };
 
 let selectedIndex = 0;
@@ -56,6 +61,7 @@ let dockLift = 140;
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 const clampIndex = (value) => clamp(value, 0, artworks.length - 1);
+const lerp = (from, to, amount) => from + (to - from) * amount;
 
 const createArtworkCard = (artwork) => {
   const link = document.createElement("a");
@@ -119,6 +125,18 @@ if (artworks.length === 0) {
     return index - rotation;
   };
 
+  const getSparseFactor = () => {
+    if (count <= 2) {
+      return 1;
+    }
+
+    if (count >= DOCK.denseAtCount) {
+      return 0;
+    }
+
+    return (DOCK.denseAtCount - count) / (DOCK.denseAtCount - 2);
+  };
+
   const updateMeasurements = () => {
     const bottomGap = clamp(archive.clientHeight * 0.04, 18, 42);
     const widthLimit = archive.clientWidth * DOCK.widthRatio;
@@ -144,11 +162,20 @@ if (artworks.length === 0) {
       Math.max(Math.min(44, availableLift), availableLift * 0.72)
     ));
 
+    const sparseFactor = getSparseFactor();
+    const spreadRatio = lerp(DOCK.denseSpreadRatio, DOCK.sparseSpreadRatio, sparseFactor);
+    const minSpreadRatio = lerp(DOCK.denseMinSpreadRatio, DOCK.sparseMinSpreadRatio, sparseFactor);
+    const viewportSpreadRatio = lerp(
+      DOCK.denseViewportSpreadRatio,
+      DOCK.sparseViewportSpreadRatio,
+      sparseFactor
+    );
+
     spread = Math.min(
-      cardWidth * DOCK.spreadRatio,
+      cardWidth * spreadRatio,
       Math.max(
-        cardWidth * DOCK.minSpreadRatio,
-        archive.clientWidth * DOCK.viewportSpreadRatio
+        cardWidth * minSpreadRatio,
+        archive.clientWidth * viewportSpreadRatio
       )
     );
   };
@@ -160,6 +187,10 @@ if (artworks.length === 0) {
   const render = () => {
     renderFrame = 0;
     selectedIndex = clampIndex(Math.round(rotation));
+    const sparseFactor = getSparseFactor();
+    const inactiveScale = lerp(DENSE_INACTIVE_SCALE, SPARSE_INACTIVE_SCALE, sparseFactor);
+    const inactiveOpacityFloor = lerp(0.42, 0.52, sparseFactor);
+    const inactiveOpacityBase = lerp(0.76, 0.84, sparseFactor);
 
     pieces.forEach((piece, index) => {
       const offset = getOffset(index);
@@ -181,8 +212,8 @@ if (artworks.length === 0) {
       const rotate = offset * 5;
       const scale = isSelected
         ? SELECTED_SCALE
-        : Math.max(0.3, INACTIVE_SCALE - distance * INACTIVE_SCALE_FALLOFF);
-      const baseOpacity = isSelected ? 1 : Math.max(0.42, 0.76 - distance * 0.08);
+        : Math.max(0.3, inactiveScale - distance * INACTIVE_SCALE_FALLOFF);
+      const baseOpacity = isSelected ? 1 : Math.max(inactiveOpacityFloor, inactiveOpacityBase - distance * 0.08);
       const edgeFade = distance > EDGE_FADE_START
         ? Math.max(0, (VISIBLE_DISTANCE - distance) / 0.8)
         : 1;
