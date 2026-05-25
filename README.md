@@ -1,8 +1,10 @@
-# io-archive
+# IO-Archive
 
-Input Output Archive is a collection of interactive web artworks.
+IO-Archive is a collection of interactive web artworks.
 
-The root page presents the available pieces as a draggable, keyboard-navigable archive.
+The name means Input Output Archive, The base of interaction: Input and Output
+
+The root page presents the available pieces of artwork as an archive.
 
 Live site: https://pcs1265.github.io/io-archive/
 

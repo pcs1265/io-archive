@@ -51,10 +51,20 @@ header {
 
 h1 {
   margin: 0;
+  font-family:
+    "Google Sans Flex", "Google Sans", Inter, ui-sans-serif, system-ui,
+    sans-serif;
+  font-optical-sizing: auto;
   font-size: clamp(1.8rem, 5.4vw, 5rem);
   line-height: 0.9;
   letter-spacing: 0;
-  font-weight: 780;
+  font-weight: 500;
+  font-style: normal;
+  font-variation-settings:
+    "slnt" 0,
+    "wdth" 100,
+    "GRAD" 0,
+    "ROND" 0;
 }
 
 .subtitle {
