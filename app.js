@@ -46,6 +46,7 @@ const DOCK = {
 };
 
 let selectedIndex = 0;
+let highlightedIndex = 0;
 let rotation = 0;
 let snapFrame = 0;
 let renderFrame = 0;
@@ -230,6 +231,7 @@ if (artworks.length === 0) {
 
       const x = getOffsetX(offset);
       const isSelected = index === selectedIndex;
+      const isHighlighted = index === highlightedIndex;
       const y = isSelected ? -dockLift : 0;
       const rotate = offset * 5;
       const scale = isSelected
@@ -242,8 +244,8 @@ if (artworks.length === 0) {
       const opacity = baseOpacity * edgeFade;
 
       piece.style.visibility = "visible";
-      piece.classList.toggle("is-selected", isSelected);
-      piece.tabIndex = isSelected ? 0 : -1;
+      piece.classList.toggle("is-selected", isHighlighted);
+      piece.tabIndex = isHighlighted ? 0 : -1;
       piece.style.setProperty("--x", `${x}px`);
       piece.style.setProperty("--y", `${y}px`);
       piece.style.setProperty("--rotate", `${rotate}deg`);
@@ -283,8 +285,11 @@ if (artworks.length === 0) {
     renderFrame = 0;
 
     const start = rotation;
-    const target = start + shortestDelta(start, index);
+    const targetIndex = clampIndex(index);
+    const target = start + shortestDelta(start, targetIndex);
     const startedAt = performance.now();
+    highlightedIndex = targetIndex;
+    pieces[highlightedIndex].focus({ preventScroll: true });
 
     const tick = (now) => {
       const progress = Math.min((now - startedAt) / SNAP_DURATION, 1);
@@ -301,7 +306,6 @@ if (artworks.length === 0) {
       rotation = clampIndex(Math.round(target));
       render();
       endActivationSoon();
-      pieces[selectedIndex].focus({ preventScroll: true });
     };
 
     snapFrame = requestAnimationFrame(tick);
