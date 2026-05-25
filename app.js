@@ -124,10 +124,6 @@ if (artworks.length === 0) {
     return value;
   };
 
-  const getOffset = (index) => {
-    return index - rotation;
-  };
-
   const getSparseFactor = () => {
     if (count <= 2) {
       return 1;
@@ -203,10 +199,6 @@ if (artworks.length === 0) {
     dragSpread = lerp(outerSpread, spread, 0.5);
   };
 
-  const shortestDelta = (from, to) => {
-    return clampIndex(to) - from;
-  };
-
   const render = () => {
     renderFrame = 0;
     selectedIndex = clampIndex(Math.round(rotation));
@@ -216,7 +208,7 @@ if (artworks.length === 0) {
     const inactiveOpacityBase = lerp(0.76, 0.84, sparseFactor);
 
     pieces.forEach((piece, index) => {
-      const offset = getOffset(index);
+      const offset = index - rotation;
       const distance = Math.abs(offset);
       const visible = distance <= VISIBLE_DISTANCE;
 
@@ -286,7 +278,7 @@ if (artworks.length === 0) {
 
     const start = rotation;
     const targetIndex = clampIndex(index);
-    const target = start + shortestDelta(start, targetIndex);
+    const target = targetIndex;
     const startedAt = performance.now();
     highlightedIndex = targetIndex;
     pieces[highlightedIndex].focus({ preventScroll: true });
