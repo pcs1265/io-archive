@@ -25,7 +25,9 @@ const state = {
   pixelRatio: 1,
   background: document.createElement("canvas"),
   strands: [],
+  contacts: new Map(),
   pointer: {
+    id: null,
     x: 0,
     y: 0,
     previousX: 0,
@@ -194,33 +196,68 @@ function resize() {
 
 function pointerPosition(event) {
   const rect = canvas.getBoundingClientRect();
-  const source = event.touches?.[0] || event.changedTouches?.[0] || event;
 
   return {
-    x: source.clientX - rect.left,
-    y: source.clientY - rect.top
+    x: event.clientX - rect.left,
+    y: event.clientY - rect.top
   };
 }
 
-function setPointer(event, active = true) {
+function contactFromEvent(event, active = true) {
   const position = pointerPosition(event);
-  state.pointer.previousX = state.pointer.active ? state.pointer.x : position.x;
-  state.pointer.previousY = state.pointer.active ? state.pointer.y : position.y;
-  state.pointer.x = position.x;
-  state.pointer.y = position.y;
-  state.pointer.active = active;
-  state.pointer.coarse = event.pointerType === "touch";
-  state.pointer.holdFrames = state.pointer.coarse
-    ? Math.ceil(TOUCH_HOLD_TIMEOUT / state.timestep)
-    : 0;
+  const previous = state.contacts.get(event.pointerId);
+  const coarse = event.pointerType === "touch";
+
+  return {
+    id: event.pointerId,
+    x: position.x,
+    y: position.y,
+    previousX: previous ? previous.x : position.x,
+    previousY: previous ? previous.y : position.y,
+    active,
+    pressing: active,
+    coarse,
+    holdFrames: coarse
+      ? Math.ceil(TOUCH_HOLD_TIMEOUT / state.timestep)
+      : 0
+  };
+}
+
+function syncPointerFromContacts(fallbackContact = null) {
+  const contacts = Array.from(state.contacts.values());
+  const pointer = contacts[contacts.length - 1] || fallbackContact;
+
+  if (!pointer) {
+    state.pointer.active = false;
+    state.pointer.pressing = false;
+    state.pointer.coarse = false;
+    state.pointer.holdFrames = 0;
+    state.pointer.id = null;
+    return;
+  }
+
+  Object.assign(state.pointer, pointer, {
+    pressing: state.contacts.size > 0 ? pointer.pressing : state.pointer.pressing
+  });
+}
+
+function setPointer(event, active = true) {
+  const contact = contactFromEvent(event, active);
+  state.pointer.previousX = state.pointer.active ? state.pointer.x : contact.x;
+  state.pointer.previousY = state.pointer.active ? state.pointer.y : contact.y;
+  Object.assign(state.pointer, contact, {
+    previousX: state.pointer.previousX,
+    previousY: state.pointer.previousY,
+    pressing: state.pointer.pressing
+  });
 }
 
 function drawBackground() {
   ctx.drawImage(state.background, 0, 0, state.width, state.height);
 }
 
-function interactWithPointer(point, strand, index) {
-  if (!state.pointer.active || !state.pointer.pressing) {
+function interactWithPointer(point, strand, index, pointer) {
+  if (!pointer.active || !pointer.pressing) {
     return;
   }
 
@@ -230,8 +267,8 @@ function interactWithPointer(point, strand, index) {
     96
   );
   const radius = baseRadius * 1.35;
-  const dx = point.x - state.pointer.x;
-  const dy = point.y - state.pointer.y;
+  const dx = point.x - pointer.x;
+  const dy = point.y - pointer.y;
   const distance = Math.hypot(dx, dy);
 
   if (distance > radius || distance === 0) {
@@ -239,8 +276,8 @@ function interactWithPointer(point, strand, index) {
   }
 
   const strength = 1 - distance / radius;
-  const velocityX = state.pointer.x - state.pointer.previousX;
-  const velocityY = state.pointer.y - state.pointer.previousY;
+  const velocityX = pointer.x - pointer.previousX;
+  const velocityY = pointer.y - pointer.previousY;
 
   const pressBoost = 1.7;
   const force = strength * 4.2 * pressBoost / strand.mass;
@@ -256,6 +293,12 @@ function interactWithPointer(point, strand, index) {
 
 function simulate(stepScale = 1) {
   state.pointer.holdFrames = Math.max(0, state.pointer.holdFrames - stepScale);
+  state.contacts.forEach((contact) => {
+    contact.holdFrames = Math.max(0, contact.holdFrames - stepScale);
+  });
+  const activePointers = state.contacts.size
+    ? Array.from(state.contacts.values())
+    : [state.pointer];
 
   state.strands.forEach((strand) => {
     strand.aura += (strand.auraTarget - strand.aura) * AURA_ATTACK * stepScale;
@@ -279,7 +322,7 @@ function simulate(stepScale = 1) {
       point.x += vx;
       point.y += vy + GRAVITY * strand.mass * stepScale * stepScale;
       point.warmth *= Math.pow(GLOW_DECAY, stepScale);
-      interactWithPointer(point, strand, index);
+      activePointers.forEach((pointer) => interactWithPointer(point, strand, index, pointer));
     });
 
     for (let iteration = 0; iteration < CONSTRAINT_ITERATIONS; iteration += 1) {
@@ -477,36 +520,46 @@ function drawBranches(strand, activity, layerFade) {
 }
 
 function drawPointer() {
-  if (!state.pointer.active || !state.pointer.pressing) {
+  const activePointers = state.contacts.size
+    ? Array.from(state.contacts.values())
+    : [state.pointer];
+  const pressedPointers = activePointers.filter((pointer) => pointer.active && pointer.pressing);
+
+  if (pressedPointers.length === 0) {
     return;
   }
 
-  const glowRadius = 52;
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
 
-  for (let ring = 4; ring >= 1; ring -= 1) {
-    const amount = ring / 4;
+  pressedPointers.forEach((pointer) => {
+    const glowRadius = 52;
+
+    for (let ring = 4; ring >= 1; ring -= 1) {
+      const amount = ring / 4;
+
+      ctx.beginPath();
+      ctx.arc(pointer.x, pointer.y, glowRadius * amount, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(94, 246, 255, ${0.018 * (1 - amount) + 0.014})`;
+      ctx.fill();
+    }
 
     ctx.beginPath();
-    ctx.arc(state.pointer.x, state.pointer.y, glowRadius * amount, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(94, 246, 255, ${0.018 * (1 - amount) + 0.014})`;
+    ctx.arc(pointer.x, pointer.y, glowRadius * 0.42, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(132, 255, 211, 0.055)";
     ctx.fill();
-  }
-
-  ctx.beginPath();
-  ctx.arc(state.pointer.x, state.pointer.y, glowRadius * 0.42, 0, Math.PI * 2);
-  ctx.fillStyle = "rgba(132, 255, 211, 0.055)";
-  ctx.fill();
+  });
   ctx.restore();
 
-  ctx.beginPath();
-  ctx.arc(state.pointer.x, state.pointer.y, 18, 0, Math.PI * 2);
-  ctx.strokeStyle = "rgba(244, 239, 229, 0.28)";
-  ctx.lineWidth = 1;
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  ctx.stroke();
+  pressedPointers.forEach((pointer) => {
+    ctx.beginPath();
+    ctx.arc(pointer.x, pointer.y, 18, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(244, 239, 229, 0.28)";
+    ctx.lineWidth = 1;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.stroke();
+  });
 }
 
 function updateTimestep(frameDelta) {
@@ -547,10 +600,20 @@ function render(time = 0) {
 }
 
 canvas.addEventListener("pointermove", (event) => {
+  if (state.contacts.has(event.pointerId)) {
+    state.contacts.set(event.pointerId, contactFromEvent(event));
+    syncPointerFromContacts();
+    return;
+  }
+
   setPointer(event);
 });
 
-canvas.addEventListener("pointerleave", () => {
+canvas.addEventListener("pointerleave", (event) => {
+  if (state.contacts.has(event.pointerId)) {
+    return;
+  }
+
   state.pointer.active = false;
   state.pointer.pressing = false;
   state.pointer.coarse = false;
@@ -560,8 +623,9 @@ canvas.addEventListener("pointerleave", () => {
 canvas.addEventListener("pointerdown", (event) => {
   event.preventDefault();
   canvas.setPointerCapture(event.pointerId);
+  state.contacts.set(event.pointerId, contactFromEvent(event));
   state.pointer.pressing = true;
-  setPointer(event);
+  syncPointerFromContacts();
 });
 
 canvas.addEventListener("pointerup", (event) => {
@@ -569,15 +633,22 @@ canvas.addEventListener("pointerup", (event) => {
     canvas.releasePointerCapture(event.pointerId);
   }
 
-  setPointer(event);
-  state.pointer.pressing = false;
+  const endedContact = contactFromEvent(event, false);
+  state.contacts.delete(event.pointerId);
+  syncPointerFromContacts(endedContact);
+  state.pointer.pressing = state.contacts.size > 0;
 });
 
-canvas.addEventListener("pointercancel", () => {
-  state.pointer.active = false;
-  state.pointer.pressing = false;
-  state.pointer.coarse = false;
-  state.pointer.holdFrames = 0;
+canvas.addEventListener("pointercancel", (event) => {
+  state.contacts.delete(event.pointerId);
+  syncPointerFromContacts();
+
+  if (state.contacts.size === 0) {
+    state.pointer.active = false;
+    state.pointer.pressing = false;
+    state.pointer.coarse = false;
+    state.pointer.holdFrames = 0;
+  }
 });
 
 window.addEventListener("resize", resize);
