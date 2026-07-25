@@ -24,6 +24,7 @@ const sound = {
   context: null,
   enabled: false,
   masterGain: null,
+  limiter: null,
   buffer: null,
   impactOffsets: [],
   loading: null,
@@ -288,7 +289,7 @@ function createReverb(audioContext) {
   toneFilter.type = "lowpass";
   toneFilter.frequency.value = 6200;
   toneFilter.Q.value = 0.45;
-  wetGain.gain.value = 0.3;
+  wetGain.gain.value = 1;
   preDelay
     .connect(convolver)
     .connect(toneFilter)
@@ -305,8 +306,14 @@ async function enableSound() {
     }
     sound.context = new AudioContext();
     sound.masterGain = sound.context.createGain();
+    sound.limiter = sound.context.createDynamicsCompressor();
     sound.masterGain.gain.value = 0.0001;
-    sound.masterGain.connect(sound.context.destination);
+    sound.limiter.threshold.value = -6;
+    sound.limiter.knee.value = 3;
+    sound.limiter.ratio.value = 12;
+    sound.limiter.attack.value = 0.002;
+    sound.limiter.release.value = 0.12;
+    sound.masterGain.connect(sound.limiter).connect(sound.context.destination);
     sound.reverb = createReverb(sound.context);
   }
 
@@ -400,10 +407,10 @@ function playImpactSound(x, size, impactSpeed) {
     1.25,
   );
   const peakGain = clamp(
-    0.15 + size * 0.0035 + impactSpeed * 0.00016 + random(-0.045, 0.045),
-    0.2,
-    0.44,
-  );
+    0.19 + size * 0.004 + impactSpeed * 0.0002 + random(-0.05, 0.05),
+    0.78,
+    1.08,
+  ) * 3;
   const highpassFrequency = clamp(
     1120 - size * 18 + random(-240, 240),
     260,
