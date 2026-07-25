@@ -3,6 +3,10 @@ const ctx = canvas.getContext("2d");
 const densityInput = document.querySelector("#density");
 const densityValue = document.querySelector("#densityValue");
 const soundToggle = document.querySelector("#soundToggle");
+const soundIcon = document.querySelector("#soundIcon");
+const panel = document.querySelector(".panel");
+const panelToggle = document.querySelector("#panelToggle");
+const panelDetails = document.querySelector("#panelDetails");
 const backgroundCanvas = document.createElement("canvas");
 const backgroundCtx = backgroundCanvas.getContext("2d");
 
@@ -340,8 +344,10 @@ async function toggleSound() {
     const now = sound.context.currentTime;
     sound.masterGain.gain.cancelScheduledValues(now);
     sound.masterGain.gain.setTargetAtTime(1, now, 0.025);
-    soundToggle.textContent = "On";
     soundToggle.setAttribute("aria-pressed", "true");
+    soundToggle.setAttribute("aria-label", "Turn sound off");
+    soundToggle.title = "Sound on";
+    soundIcon.textContent = "🔊";
     return;
   }
 
@@ -349,8 +355,10 @@ async function toggleSound() {
   const now = sound.context.currentTime;
   sound.masterGain.gain.cancelScheduledValues(now);
   sound.masterGain.gain.setTargetAtTime(0.0001, now, 0.02);
-  soundToggle.textContent = "Off";
   soundToggle.setAttribute("aria-pressed", "false");
+  soundToggle.setAttribute("aria-label", "Turn sound on");
+  soundToggle.title = "Sound off";
+  soundIcon.textContent = "🔇";
 }
 
 function playImpactSound(x, size, impactSpeed) {
@@ -613,6 +621,34 @@ densityInput.addEventListener("input", () => {
   densityValue.value = `${densityInput.value}%`;
 });
 soundToggle.addEventListener("click", toggleSound);
+
+const mobilePanelQuery = window.matchMedia("(max-width: 760px)");
+
+function setPanelCollapsed(collapsed) {
+  panel.classList.toggle("is-collapsed", collapsed);
+  panelToggle.setAttribute("aria-expanded", String(!collapsed));
+  panelToggle.setAttribute(
+    "aria-label",
+    collapsed ? "Show artwork controls" : "Hide artwork controls",
+  );
+  panelDetails.setAttribute("aria-hidden", String(collapsed));
+  panelDetails.inert = collapsed;
+}
+
+function syncPanelForViewport(event) {
+  setPanelCollapsed(event.matches);
+}
+
+panelToggle.addEventListener("click", () => {
+  setPanelCollapsed(!panel.classList.contains("is-collapsed"));
+});
+
+if (typeof mobilePanelQuery.addEventListener === "function") {
+  mobilePanelQuery.addEventListener("change", syncPanelForViewport);
+} else {
+  mobilePanelQuery.addListener(syncPanelForViewport);
+}
+syncPanelForViewport(mobilePanelQuery);
 
 resize();
 const initialGlyphCount = Math.round(24 * effectiveDensity());

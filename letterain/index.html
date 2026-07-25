@@ -18,9 +18,35 @@
       <canvas id="artworkCanvas"></canvas>
 
       <section class="panel" aria-label="Artwork description">
-        <div>
+        <div class="panel-header">
           <h1>Letterain</h1>
-          <p>Letters fall, fracture, and return as rain.</p>
+          <div class="panel-actions">
+            <button
+              id="soundToggle"
+              class="sound-toggle"
+              type="button"
+              aria-label="Turn sound on"
+              aria-pressed="false"
+              title="Sound off"
+            >
+              <span id="soundIcon" class="sound-icon" aria-hidden="true">🔇</span>
+            </button>
+            <button
+              id="panelToggle"
+              class="panel-toggle"
+              type="button"
+              aria-label="Show artwork controls"
+              aria-controls="panelDetails"
+              aria-expanded="true"
+            >
+              <span class="chevron" aria-hidden="true"></span>
+            </button>
+          </div>
+        </div>
+
+        <p class="panel-description">Letters fall and fracture as rain.</p>
+
+        <div id="panelDetails" class="panel-details">
           <div class="density-control">
             <label for="density">
               <span>Density</span>
@@ -35,14 +61,6 @@
               value="100"
               aria-label="Letter density"
             />
-          </div>
-          <div class="sound-control">
-            <span>Sound</span>
-            <button
-              id="soundToggle"
-              type="button"
-              aria-pressed="false"
-            >Off</button>
           </div>
         </div>
       </section>
