@@ -268,7 +268,7 @@ function createReverb(audioContext) {
   const convolver = audioContext.createConvolver();
   const toneFilter = audioContext.createBiquadFilter();
   const wetGain = audioContext.createGain();
-  const duration = 1.35;
+  const duration = 2;
   const length = Math.floor(audioContext.sampleRate * duration);
   const impulse = audioContext.createBuffer(2, length, audioContext.sampleRate);
 
@@ -276,17 +276,17 @@ function createReverb(audioContext) {
     const data = impulse.getChannelData(channel);
     for (let index = 0; index < length; index += 1) {
       const progress = index / length;
-      const decay = Math.pow(1 - progress, 2.15);
+      const decay = Math.pow(1 - progress, 1.7);
       data[index] = random(-1, 1) * decay;
     }
   }
 
-  preDelay.delayTime.value = 0.032;
+  preDelay.delayTime.value = 0.04;
   convolver.buffer = impulse;
   toneFilter.type = "lowpass";
   toneFilter.frequency.value = 6200;
   toneFilter.Q.value = 0.45;
-  wetGain.gain.value = 1;
+  wetGain.gain.value = 1.4;
   preDelay
     .connect(convolver)
     .connect(toneFilter)
@@ -383,6 +383,7 @@ function playImpactSound(x, size, impactSpeed) {
   const highpass = audioContext.createBiquadFilter();
   const lowpass = audioContext.createBiquadFilter();
   const gain = audioContext.createGain();
+  const dryGain = audioContext.createGain();
   const reverbSend = audioContext.createGain();
   const panner = typeof audioContext.createStereoPanner === "function"
     ? audioContext.createStereoPanner()
@@ -399,9 +400,9 @@ function playImpactSound(x, size, impactSpeed) {
     sound.buffer.duration - grainDuration,
   );
   const playbackRate = clamp(
-    1.28 - size * 0.011 + random(-0.12, 0.12),
-    0.78,
-    1.25,
+    1.5 - size * 0.009 + random(-0.1, 0.12),
+    1.02,
+    1.45,
   );
   const peakGain = clamp(
     0.19 + size * 0.004 + impactSpeed * 0.0002 + random(-0.05, 0.05),
@@ -414,9 +415,9 @@ function playImpactSound(x, size, impactSpeed) {
     1250,
   );
   const reverbAmount = clamp(
-    0.55 + size * 0.011 + random(-0.16, 0.16),
-    0.5,
-    1.15,
+    0.65 + size * 0.012 + random(-0.16, 0.16),
+    0.6,
+    1.3,
   );
   source.buffer = sound.buffer;
   source.playbackRate.setValueAtTime(playbackRate, now);
@@ -426,6 +427,7 @@ function playImpactSound(x, size, impactSpeed) {
   lowpass.type = "lowpass";
   lowpass.frequency.setValueAtTime(random(5200, 9800), now);
   lowpass.Q.setValueAtTime(0.5, now);
+  dryGain.gain.setValueAtTime(0.5, now);
   reverbSend.gain.setValueAtTime(reverbAmount, now);
   gain.gain.setValueAtTime(0.0001, now);
   gain.gain.exponentialRampToValueAtTime(peakGain, now + 0.0015);
@@ -437,11 +439,11 @@ function playImpactSound(x, size, impactSpeed) {
       now,
     );
     source.connect(highpass).connect(lowpass).connect(gain).connect(panner);
-    panner.connect(sound.masterGain);
+    panner.connect(dryGain).connect(sound.masterGain);
     panner.connect(reverbSend).connect(sound.reverb);
   } else {
     source.connect(highpass).connect(lowpass).connect(gain);
-    gain.connect(sound.masterGain);
+    gain.connect(dryGain).connect(sound.masterGain);
     gain.connect(reverbSend).connect(sound.reverb);
   }
 
