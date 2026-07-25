@@ -13,9 +13,9 @@ const backgroundCtx = backgroundCanvas.getContext("2d");
 const LETTERS = ["R", "A", "I", "N"];
 const COLORS = ["#c6f1ff", "#91d9f0", "#d7ebf1", "#70bed9"];
 const BASE_WIDTH = 1440;
-const BASE_MAX_GLYPHS = 320;
-const BASE_MAX_RIPPLES = 84;
-const BASE_MAX_DROPS = 220;
+const EMERGENCY_MAX_GLYPHS = 2000;
+const EMERGENCY_MAX_RIPPLES = 500;
+const EMERGENCY_MAX_DROPS = 1200;
 const FIXED_TIME_STEP = 1 / 60;
 const MAX_FRAME_DELTA = 0.1;
 
@@ -55,28 +55,6 @@ function widthDensity() {
 
 function effectiveDensity() {
   return widthDensity() * state.densityMultiplier;
-}
-
-function glyphLimit() {
-  const screenLimit = Math.round(clamp(state.width * 0.72, 420, 1200));
-  return Math.min(
-    screenLimit,
-    Math.round(BASE_MAX_GLYPHS * effectiveDensity()),
-  );
-}
-
-function rippleLimit() {
-  return Math.min(
-    Math.round(glyphLimit() * 0.25),
-    Math.round(BASE_MAX_RIPPLES * effectiveDensity()),
-  );
-}
-
-function dropLimit() {
-  return Math.min(
-    Math.round(glyphLimit() * 0.7),
-    Math.round(BASE_MAX_DROPS * effectiveDensity()),
-  );
 }
 
 function minImpactDepth() {
@@ -198,7 +176,7 @@ function addRipple(x, y, strength = 1) {
     alpha: 0.42 * strength,
     speed: random(65, 95),
   });
-  const limit = rippleLimit();
+  const limit = EMERGENCY_MAX_RIPPLES;
   if (state.ripples.length > limit) {
     state.ripples.splice(0, state.ripples.length - limit);
   }
@@ -217,7 +195,7 @@ function addDrops(x, y, color) {
       color,
     });
   }
-  const limit = dropLimit();
+  const limit = EMERGENCY_MAX_DROPS;
   if (state.drops.length > limit) {
     state.drops.splice(0, state.drops.length - limit);
   }
@@ -506,7 +484,7 @@ function update(dt) {
   const splashGravity = state.reducedMotion ? 230 : 360;
   const nextGlyphs = [];
   const density = effectiveDensity();
-  const maxGlyphs = glyphLimit();
+  const maxGlyphs = EMERGENCY_MAX_GLYPHS;
 
   state.spawnTimer -= dt;
   if (state.spawnTimer <= 0) {
