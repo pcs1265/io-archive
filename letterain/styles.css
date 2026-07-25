@@ -78,7 +78,7 @@ h1 {
 
 .panel-details {
   max-height: 160px;
-  padding-top: 2px;
+  padding: 2px 0 6px;
   overflow: hidden;
   opacity: 1;
   transition:
@@ -161,10 +161,6 @@ p {
   line-height: 1;
 }
 
-.panel-toggle {
-  display: none;
-}
-
 .chevron {
   display: block;
   width: 7px;
@@ -179,23 +175,19 @@ p {
   transform: translateY(2px) rotate(225deg);
 }
 
+.panel.is-collapsed {
+  width: 210px;
+}
+
+.panel.is-collapsed .panel-details {
+  max-height: 0;
+  padding: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
 @media (max-width: 760px) {
   .panel {
     width: min(300px, calc(100vw - 32px));
-  }
-
-  .panel.is-collapsed {
-    width: 210px;
-  }
-
-  .panel-toggle {
-    display: grid;
-  }
-
-  .panel.is-collapsed .panel-details {
-    max-height: 0;
-    padding-top: 0;
-    opacity: 0;
-    pointer-events: none;
   }
 }
