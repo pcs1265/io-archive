@@ -18,6 +18,7 @@ const EMERGENCY_MAX_RIPPLES = 500;
 const EMERGENCY_MAX_DROPS = 1200;
 const FIXED_TIME_STEP = 1 / 60;
 const MAX_FRAME_DELTA = 0.1;
+const SOUND_FADE_TIME = 0.4;
 
 const sound = {
   context: null,
@@ -347,7 +348,7 @@ async function toggleSound() {
     sound.enabled = true;
     const now = sound.context.currentTime;
     sound.masterGain.gain.cancelScheduledValues(now);
-    sound.masterGain.gain.setTargetAtTime(1, now, 0.025);
+    sound.masterGain.gain.setTargetAtTime(1, now, SOUND_FADE_TIME);
     soundToggle.setAttribute("aria-pressed", "true");
     soundToggle.setAttribute("aria-label", "Turn sound off");
     soundToggle.title = "Sound on";
@@ -358,7 +359,7 @@ async function toggleSound() {
   sound.enabled = false;
   const now = sound.context.currentTime;
   sound.masterGain.gain.cancelScheduledValues(now);
-  sound.masterGain.gain.setTargetAtTime(0.0001, now, 0.02);
+  sound.masterGain.gain.setTargetAtTime(0.0001, now, SOUND_FADE_TIME);
   soundToggle.setAttribute("aria-pressed", "false");
   soundToggle.setAttribute("aria-label", "Turn sound on");
   soundToggle.title = "Sound off";
