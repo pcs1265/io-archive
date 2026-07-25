@@ -1,5 +1,11 @@
 const artworks = [
   {
+    title: "Letterain",
+    path: "letterain/",
+    description: "Falling letters fracture into R, A, I, and N when they strike the ground.",
+    accent: "#071923"
+  },
+  {
     title: "Auroral Vines",
     path: "auroral-vines/",
     description: "Bioluminescent hanging vines glow and swing under touch.",
