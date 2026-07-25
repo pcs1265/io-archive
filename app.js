@@ -3,6 +3,7 @@ const artworks = [
     title: "Letterain",
     path: "letterain/",
     description: "Falling letters fracture into R, A, I, and N when they strike the ground.",
+    thumb: "letterain/thumb.png",
     accent: "#071923"
   },
   {
