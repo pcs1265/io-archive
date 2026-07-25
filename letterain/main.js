@@ -18,7 +18,6 @@ const BASE_MAX_RIPPLES = 84;
 const BASE_MAX_DROPS = 220;
 const FIXED_TIME_STEP = 1 / 60;
 const MAX_FRAME_DELTA = 0.1;
-const GROUND_IMPACT_DEPTH = 5;
 
 const sound = {
   context: null,
@@ -80,6 +79,25 @@ function dropLimit() {
   );
 }
 
+function minImpactDepth() {
+  return clamp(state.height * 0.008, 4, 8);
+}
+
+function maxImpactDepth() {
+  return clamp(state.height * 0.065, 28, 56);
+}
+
+function randomImpactDepth(x) {
+  const minDepth = minImpactDepth();
+  const maxDepth = maxImpactDepth();
+  const surfaceVariation = Math.sin(x * 0.012) * 3;
+  return clamp(
+    random(minDepth, maxDepth) + surfaceVariation,
+    minDepth,
+    maxDepth,
+  );
+}
+
 function resize() {
   const oldWidth = state.width || window.innerWidth;
   const oldHeight = state.height || window.innerHeight;
@@ -99,6 +117,11 @@ function resize() {
   state.glyphs.forEach((glyph) => {
     glyph.x *= scaleX;
     glyph.y *= scaleY;
+    glyph.impactDepth = clamp(
+      glyph.impactDepth * scaleY,
+      minImpactDepth(),
+      maxImpactDepth(),
+    );
   });
 
   buildBackground();
@@ -128,13 +151,6 @@ function buildBackground() {
     state.width,
     state.height - state.groundY + 70,
   );
-
-  backgroundCtx.beginPath();
-  backgroundCtx.moveTo(0, state.groundY);
-  backgroundCtx.lineTo(state.width, state.groundY);
-  backgroundCtx.strokeStyle = "rgba(154, 217, 237, 0.12)";
-  backgroundCtx.lineWidth = 1;
-  backgroundCtx.stroke();
 }
 
 function makeGlyph({
@@ -145,6 +161,7 @@ function makeGlyph({
   vy = random(370, 500),
   size = random(20, 42),
   generation = 0,
+  impactDepth = randomImpactDepth(x),
   rotation = random(-0.18, 0.18),
   spin = random(-0.3, 0.3),
   life = Infinity,
@@ -157,6 +174,7 @@ function makeGlyph({
     vy,
     size: Math.round(size),
     generation,
+    impactDepth,
     rotation,
     spin,
     life,
@@ -172,10 +190,10 @@ function spawnLetters(count = 1) {
   }
 }
 
-function addRipple(x, strength = 1) {
+function addRipple(x, y, strength = 1) {
   state.ripples.push({
     x,
-    y: state.groundY + GROUND_IMPACT_DEPTH,
+    y,
     radius: 4,
     alpha: 0.42 * strength,
     speed: random(65, 95),
@@ -195,6 +213,7 @@ function addDrops(x, y, color) {
       vx: random(-52, 52),
       vy: random(-115, -35),
       life: random(0.3, 0.65),
+      surfaceY: y,
       color,
     });
   }
@@ -454,8 +473,8 @@ function playImpactSound(x, size, impactSpeed) {
 
 function fracture(glyph) {
   const impactX = glyph.x;
-  const impactY = state.groundY + GROUND_IMPACT_DEPTH;
-  addRipple(impactX, 1);
+  const impactY = state.groundY + glyph.impactDepth;
+  addRipple(impactX, impactY, 1);
   addDrops(impactX, impactY, glyph.color);
   playImpactSound(impactX, glyph.size, Math.abs(glyph.vy));
 
@@ -470,6 +489,11 @@ function fracture(glyph) {
       vy: -random(115, 185) * (1 - Math.abs(direction) * 0.18),
       size: childSize * random(0.9, 1.1),
       generation: 1,
+      impactDepth: clamp(
+        glyph.impactDepth + random(-6, 8),
+        minImpactDepth(),
+        maxImpactDepth(),
+      ),
       rotation: glyph.rotation,
       spin: direction * random(3.2, 5.8),
       life: random(0.9, 1.45),
@@ -508,13 +532,13 @@ function update(dt) {
     if (glyph.x < -60) glyph.x = state.width + 50;
     if (glyph.x > state.width + 60) glyph.x = -50;
 
-    const baseline = state.groundY + GROUND_IMPACT_DEPTH;
+    const baseline = state.groundY + glyph.impactDepth;
     if (glyph.y >= baseline && glyph.vy > 0) {
       if (glyph.generation === 0 && state.glyphs.length < maxGlyphs - 4) {
         fracture(glyph);
       } else {
-        addRipple(glyph.x, 0.45);
-        addDrops(glyph.x, state.groundY, glyph.color);
+        addRipple(glyph.x, baseline, 0.45);
+        addDrops(glyph.x, baseline, glyph.color);
       }
       continue;
     }
@@ -537,7 +561,7 @@ function update(dt) {
     drop.x += drop.vx * dt;
     drop.y += drop.vy * dt;
     drop.life -= dt;
-    return drop.life > 0 && drop.y < state.groundY + 4;
+    return drop.life > 0 && drop.y < drop.surfaceY + 4;
   });
 }
 
@@ -577,10 +601,26 @@ function drawEffects() {
   ctx.clip();
 
   for (const ripple of state.ripples) {
+    const depthRatio = clamp(
+      (ripple.y - state.groundY) / maxImpactDepth(),
+      0,
+      1,
+    );
+    const verticalScale = 0.09 + depthRatio * 0.055;
     ctx.beginPath();
-    ctx.ellipse(ripple.x, ripple.y, ripple.radius, ripple.radius * 0.12, 0, 0, Math.PI * 2);
+    ctx.ellipse(
+      ripple.x,
+      ripple.y,
+      ripple.radius,
+      ripple.radius * verticalScale,
+      0,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fillStyle = `rgba(123, 195, 219, ${ripple.alpha * 0.07})`;
+    ctx.fill();
     ctx.strokeStyle = `rgba(160, 226, 246, ${ripple.alpha})`;
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 0.8 + depthRatio * 0.45;
     ctx.stroke();
   }
   ctx.restore();
