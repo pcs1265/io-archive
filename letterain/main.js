@@ -1,5 +1,8 @@
 const canvas = document.querySelector("#artworkCanvas");
 const ctx = canvas.getContext("2d");
+const densityInput = document.querySelector("#density");
+const densityValue = document.querySelector("#densityValue");
+const soundToggle = document.querySelector("#soundToggle");
 const backgroundCanvas = document.createElement("canvas");
 const backgroundCtx = backgroundCanvas.getContext("2d");
 
@@ -13,6 +16,16 @@ const FIXED_TIME_STEP = 1 / 60;
 const MAX_FRAME_DELTA = 0.1;
 const GROUND_IMPACT_DEPTH = 5;
 
+const sound = {
+  context: null,
+  enabled: false,
+  masterGain: null,
+  buffer: null,
+  impactOffsets: [],
+  loading: null,
+  reverb: null,
+};
+
 const state = {
   width: 0,
   height: 0,
@@ -22,6 +35,7 @@ const state = {
   ripples: [],
   drops: [],
   spawnTimer: 0,
+  densityMultiplier: 1,
   lastTime: 0,
   accumulatedTime: 0,
   reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
@@ -35,16 +49,30 @@ function widthDensity() {
   return clamp(state.width / BASE_WIDTH, 0.45, 1.8);
 }
 
+function effectiveDensity() {
+  return widthDensity() * state.densityMultiplier;
+}
+
 function glyphLimit() {
-  return Math.round(BASE_MAX_GLYPHS * widthDensity());
+  const screenLimit = Math.round(clamp(state.width * 0.72, 420, 1200));
+  return Math.min(
+    screenLimit,
+    Math.round(BASE_MAX_GLYPHS * effectiveDensity()),
+  );
 }
 
 function rippleLimit() {
-  return Math.round(BASE_MAX_RIPPLES * widthDensity());
+  return Math.min(
+    Math.round(glyphLimit() * 0.25),
+    Math.round(BASE_MAX_RIPPLES * effectiveDensity()),
+  );
 }
 
 function dropLimit() {
-  return Math.round(BASE_MAX_DROPS * widthDensity());
+  return Math.min(
+    Math.round(glyphLimit() * 0.7),
+    Math.round(BASE_MAX_DROPS * effectiveDensity()),
+  );
 }
 
 function resize() {
@@ -109,7 +137,7 @@ function makeGlyph({
   x = random(20, state.width - 20),
   y = random(-100, -30),
   vx = random(-12, 12),
-  vy = random(80, 145),
+  vy = random(370, 500),
   size = random(20, 42),
   generation = 0,
   rotation = random(-0.18, 0.18),
@@ -171,34 +199,274 @@ function addDrops(x, y, color) {
   }
 }
 
+function detectImpactOffsets(buffer) {
+  const samples = buffer.getChannelData(0);
+  const sampleRate = buffer.sampleRate;
+  const hopSize = Math.max(64, Math.floor(sampleRate * 0.004));
+  const envelopeLength = Math.floor(samples.length / hopSize);
+  const envelope = new Float32Array(envelopeLength);
+
+  for (let index = 0; index < envelopeLength; index += 1) {
+    let peak = 0;
+    const start = index * hopSize;
+    const end = Math.min(samples.length, start + hopSize);
+    for (let sampleIndex = start; sampleIndex < end; sampleIndex += 1) {
+      peak = Math.max(peak, Math.abs(samples[sampleIndex]));
+    }
+    envelope[index] = peak;
+  }
+
+  const prefix = new Float32Array(envelopeLength + 1);
+  for (let index = 0; index < envelopeLength; index += 1) {
+    prefix[index + 1] = prefix[index] + envelope[index];
+  }
+
+  const candidates = [];
+  const neighborhood = 30;
+  for (let index = neighborhood; index < envelopeLength - neighborhood; index += 1) {
+    if (
+      envelope[index] < envelope[index - 1]
+      || envelope[index] < envelope[index + 1]
+    ) {
+      continue;
+    }
+
+    const surroundingSum = (
+      prefix[index + neighborhood]
+      - prefix[index - neighborhood]
+      - envelope[index]
+    );
+    const baseline = surroundingSum / (neighborhood * 2 - 1);
+    const contrast = envelope[index] / (baseline + 0.002);
+    candidates.push({
+      index,
+      score: Math.max(0, envelope[index] - baseline) * contrast,
+    });
+  }
+
+  const minimumSpacing = Math.ceil(0.14 * sampleRate / hopSize);
+  const selected = [];
+  candidates
+    .sort((a, b) => b.score - a.score)
+    .some((candidate) => {
+      const isSeparate = selected.every(
+        (index) => Math.abs(index - candidate.index) >= minimumSpacing,
+      );
+      if (isSeparate) {
+        selected.push(candidate.index);
+      }
+      return selected.length >= 160;
+    });
+
+  return selected.map((index) => index * hopSize / sampleRate);
+}
+
+function createReverb(audioContext) {
+  const preDelay = audioContext.createDelay(0.1);
+  const convolver = audioContext.createConvolver();
+  const toneFilter = audioContext.createBiquadFilter();
+  const wetGain = audioContext.createGain();
+  const duration = 1.35;
+  const length = Math.floor(audioContext.sampleRate * duration);
+  const impulse = audioContext.createBuffer(2, length, audioContext.sampleRate);
+
+  for (let channel = 0; channel < impulse.numberOfChannels; channel += 1) {
+    const data = impulse.getChannelData(channel);
+    for (let index = 0; index < length; index += 1) {
+      const progress = index / length;
+      const decay = Math.pow(1 - progress, 2.15);
+      data[index] = random(-1, 1) * decay;
+    }
+  }
+
+  preDelay.delayTime.value = 0.032;
+  convolver.buffer = impulse;
+  toneFilter.type = "lowpass";
+  toneFilter.frequency.value = 6200;
+  toneFilter.Q.value = 0.45;
+  wetGain.gain.value = 0.3;
+  preDelay
+    .connect(convolver)
+    .connect(toneFilter)
+    .connect(wetGain)
+    .connect(sound.masterGain);
+  return preDelay;
+}
+
+async function enableSound() {
+  if (!sound.context) {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) {
+      return;
+    }
+    sound.context = new AudioContext();
+    sound.masterGain = sound.context.createGain();
+    sound.masterGain.gain.value = 0.0001;
+    sound.masterGain.connect(sound.context.destination);
+    sound.reverb = createReverb(sound.context);
+  }
+
+  if (sound.context.state === "suspended") {
+    await sound.context.resume();
+  }
+
+  if (!sound.buffer && !sound.loading) {
+    sound.loading = fetch("rain-puddle.mp3")
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`Unable to load rain audio: ${response.status}`);
+        }
+        return response.arrayBuffer();
+      })
+      .then((audioData) => sound.context.decodeAudioData(audioData))
+      .then((buffer) => {
+        sound.buffer = buffer;
+        sound.impactOffsets = detectImpactOffsets(buffer);
+      })
+      .catch(() => {
+        sound.loading = null;
+      });
+  }
+}
+
+async function toggleSound() {
+  if (!sound.enabled) {
+    await enableSound();
+    if (!sound.context || !sound.masterGain) {
+      return;
+    }
+
+    sound.enabled = true;
+    const now = sound.context.currentTime;
+    sound.masterGain.gain.cancelScheduledValues(now);
+    sound.masterGain.gain.setTargetAtTime(1, now, 0.025);
+    soundToggle.textContent = "On";
+    soundToggle.setAttribute("aria-pressed", "true");
+    return;
+  }
+
+  sound.enabled = false;
+  const now = sound.context.currentTime;
+  sound.masterGain.gain.cancelScheduledValues(now);
+  sound.masterGain.gain.setTargetAtTime(0.0001, now, 0.02);
+  soundToggle.textContent = "Off";
+  soundToggle.setAttribute("aria-pressed", "false");
+}
+
+function playImpactSound(x, size, impactSpeed) {
+  const audioContext = sound.context;
+  if (
+    !sound.enabled
+    ||
+    !audioContext
+    || audioContext.state !== "running"
+    || !sound.buffer
+    || sound.impactOffsets.length === 0
+  ) {
+    return;
+  }
+
+  const now = audioContext.currentTime;
+  const source = audioContext.createBufferSource();
+  const highpass = audioContext.createBiquadFilter();
+  const lowpass = audioContext.createBiquadFilter();
+  const gain = audioContext.createGain();
+  const reverbSend = audioContext.createGain();
+  const panner = typeof audioContext.createStereoPanner === "function"
+    ? audioContext.createStereoPanner()
+    : null;
+  const grainDuration = clamp(
+    0.08 + size * 0.002 + random(-0.012, 0.018),
+    0.1,
+    0.18,
+  );
+  const impactOffset = choose(sound.impactOffsets);
+  const offset = clamp(
+    impactOffset - random(0.006, 0.012),
+    0,
+    sound.buffer.duration - grainDuration,
+  );
+  const playbackRate = clamp(
+    1.28 - size * 0.011 + random(-0.12, 0.12),
+    0.78,
+    1.25,
+  );
+  const peakGain = clamp(
+    0.15 + size * 0.0035 + impactSpeed * 0.00016 + random(-0.045, 0.045),
+    0.2,
+    0.44,
+  );
+  const highpassFrequency = clamp(
+    1120 - size * 18 + random(-240, 240),
+    260,
+    1250,
+  );
+  const reverbAmount = clamp(
+    0.55 + size * 0.011 + random(-0.16, 0.16),
+    0.5,
+    1.15,
+  );
+  source.buffer = sound.buffer;
+  source.playbackRate.setValueAtTime(playbackRate, now);
+  highpass.type = "highpass";
+  highpass.frequency.setValueAtTime(highpassFrequency, now);
+  highpass.Q.setValueAtTime(0.7, now);
+  lowpass.type = "lowpass";
+  lowpass.frequency.setValueAtTime(random(5200, 9800), now);
+  lowpass.Q.setValueAtTime(0.5, now);
+  reverbSend.gain.setValueAtTime(reverbAmount, now);
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(peakGain, now + 0.0015);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + grainDuration);
+
+  if (panner) {
+    panner.pan.setValueAtTime(
+      clamp((x / state.width) * 2 - 1, -0.85, 0.85),
+      now,
+    );
+    source.connect(highpass).connect(lowpass).connect(gain).connect(panner);
+    panner.connect(sound.masterGain);
+    panner.connect(reverbSend).connect(sound.reverb);
+  } else {
+    source.connect(highpass).connect(lowpass).connect(gain);
+    gain.connect(sound.masterGain);
+    gain.connect(reverbSend).connect(sound.reverb);
+  }
+
+  source.start(now, offset, grainDuration);
+  source.stop(now + grainDuration + 0.01);
+}
+
 function fracture(glyph) {
   const impactX = glyph.x;
   const impactY = state.groundY + GROUND_IMPACT_DEPTH;
   addRipple(impactX, 1);
   addDrops(impactX, impactY, glyph.color);
+  playImpactSound(impactX, glyph.size, Math.abs(glyph.vy));
 
-  const childSize = Math.max(10, glyph.size * 0.48);
+  const childSize = Math.max(8, glyph.size * 0.4);
   LETTERS.forEach((letter, index) => {
     const direction = (index - 1.5) / 1.5;
     state.glyphs.push(makeGlyph({
       letter,
       x: impactX + direction * 5,
       y: impactY - childSize * 0.4,
-      vx: direction * random(55, 105) + random(-12, 12),
-      vy: -random(175, 285) * (1 - Math.abs(direction) * 0.12),
+      vx: direction * random(95, 165) + random(-16, 16),
+      vy: -random(115, 185) * (1 - Math.abs(direction) * 0.18),
       size: childSize * random(0.9, 1.1),
       generation: 1,
       rotation: glyph.rotation,
-      spin: direction * random(1.3, 2.7),
-      life: random(2.2, 3.3),
+      spin: direction * random(3.2, 5.8),
+      life: random(0.9, 1.45),
     }));
   });
 }
 
 function update(dt) {
-  const gravity = state.reducedMotion ? 235 : 340;
+  const rainGravity = state.reducedMotion ? 60 : 105;
+  const splashGravity = state.reducedMotion ? 230 : 360;
   const nextGlyphs = [];
-  const density = widthDensity();
+  const density = effectiveDensity();
   const maxGlyphs = glyphLimit();
 
   state.spawnTimer -= dt;
@@ -212,6 +480,7 @@ function update(dt) {
   }
 
   for (const glyph of state.glyphs) {
+    const gravity = glyph.generation === 0 ? rainGravity : splashGravity;
     glyph.vy += gravity * dt;
     glyph.x += glyph.vx * dt;
     glyph.y += glyph.vy * dt;
@@ -249,7 +518,7 @@ function update(dt) {
   });
 
   state.drops = state.drops.filter((drop) => {
-    drop.vy += gravity * 0.72 * dt;
+    drop.vy += splashGravity * 0.72 * dt;
     drop.x += drop.vx * dt;
     drop.y += drop.vy * dt;
     drop.life -= dt;
@@ -339,13 +608,18 @@ function render(time = 0) {
 }
 
 window.addEventListener("resize", resize);
+densityInput.addEventListener("input", () => {
+  state.densityMultiplier = Number(densityInput.value) / 100;
+  densityValue.value = `${densityInput.value}%`;
+});
+soundToggle.addEventListener("click", toggleSound);
 
 resize();
-const initialGlyphCount = Math.round(24 * widthDensity());
+const initialGlyphCount = Math.round(24 * effectiveDensity());
 for (let index = 0; index < initialGlyphCount; index += 1) {
   state.glyphs.push(makeGlyph({
     y: random(-state.height * 0.9, state.groundY - 110),
-    vy: random(80, 160),
+    vy: random(390, 540),
   }));
 }
 requestAnimationFrame(render);
