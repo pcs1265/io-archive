@@ -21,6 +21,29 @@
         <div>
           <h1>Letterain</h1>
           <p>Letters fall, fracture, and return as rain.</p>
+          <div class="density-control">
+            <label for="density">
+              <span>Density</span>
+              <output id="densityValue" for="density">100%</output>
+            </label>
+            <input
+              id="density"
+              type="range"
+              min="50"
+              max="300"
+              step="10"
+              value="100"
+              aria-label="Letter density"
+            />
+          </div>
+          <div class="sound-control">
+            <span>Sound</span>
+            <button
+              id="soundToggle"
+              type="button"
+              aria-pressed="false"
+            >Off</button>
+          </div>
         </div>
       </section>
     </main>
