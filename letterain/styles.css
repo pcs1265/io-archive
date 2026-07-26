@@ -34,6 +34,12 @@ body {
   height: 100dvh;
 }
 
+.stage:fullscreen {
+  width: 100%;
+  height: 100%;
+  background: #03080c;
+}
+
 #artworkCanvas {
   display: block;
   width: 100%;
@@ -48,12 +54,17 @@ body {
   padding: 10px 12px;
   border: 1px solid var(--panel-border);
   border-radius: 8px;
+  overflow: hidden;
   background: var(--panel);
   backdrop-filter: blur(18px);
   box-shadow: 0 22px 70px rgba(0, 0, 0, 0.28);
   transition:
     width 240ms cubic-bezier(0.16, 1, 0.3, 1),
     padding 240ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.panel.is-fullscreen-resizing {
+  transition: none;
 }
 
 .panel-header {
@@ -130,6 +141,7 @@ p {
   outline-offset: 3px;
 }
 
+.fullscreen-toggle,
 .sound-toggle,
 .panel-toggle {
   display: grid;
@@ -144,16 +156,44 @@ p {
   cursor: pointer;
 }
 
+.fullscreen-toggle[hidden] {
+  display: none;
+}
+
+.fullscreen-toggle[aria-pressed="true"],
 .sound-toggle[aria-pressed="true"] {
   border-color: rgba(154, 217, 237, 0.52);
   background: rgba(154, 217, 237, 0.16);
   color: var(--ink);
 }
 
+.fullscreen-toggle:focus-visible,
 .sound-toggle:focus-visible,
 .panel-toggle:focus-visible {
   outline: 1px solid rgba(198, 241, 255, 0.76);
   outline-offset: 3px;
+}
+
+.fullscreen-icon {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.fullscreen-exit-icon {
+  display: none;
+}
+
+.fullscreen-toggle[aria-pressed="true"] .fullscreen-enter-icon {
+  display: none;
+}
+
+.fullscreen-toggle[aria-pressed="true"] .fullscreen-exit-icon {
+  display: block;
 }
 
 .sound-icon {
@@ -184,6 +224,28 @@ p {
   padding: 0;
   opacity: 0;
   pointer-events: none;
+}
+
+.stage:fullscreen .panel {
+  width: auto;
+  padding: 6px;
+}
+
+.stage:fullscreen .panel-header {
+  display: block;
+}
+
+.stage:fullscreen .panel-header h1,
+.stage:fullscreen .sound-toggle,
+.stage:fullscreen .panel-toggle,
+.stage:fullscreen .panel-description,
+.stage:fullscreen .panel-details {
+  display: none;
+}
+
+.stage:fullscreen .fullscreen-toggle {
+  width: 32px;
+  height: 32px;
 }
 
 @media (max-width: 760px) {

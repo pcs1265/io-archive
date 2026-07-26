@@ -1,7 +1,9 @@
 const canvas = document.querySelector("#artworkCanvas");
 const ctx = canvas.getContext("2d");
+const stage = document.querySelector(".stage");
 const densityInput = document.querySelector("#density");
 const densityValue = document.querySelector("#densityValue");
+const fullscreenToggle = document.querySelector("#fullscreenToggle");
 const soundToggle = document.querySelector("#soundToggle");
 const soundIcon = document.querySelector("#soundIcon");
 const panel = document.querySelector(".panel");
@@ -9,6 +11,7 @@ const panelToggle = document.querySelector("#panelToggle");
 const panelDetails = document.querySelector("#panelDetails");
 const backgroundCanvas = document.createElement("canvas");
 const backgroundCtx = backgroundCanvas.getContext("2d");
+let lastPanelRect = null;
 
 const LETTERS = ["R", "A", "I", "N"];
 const COLORS = ["#c6f1ff", "#91d9f0", "#d7ebf1", "#70bed9"];
@@ -643,12 +646,84 @@ function render(time = 0) {
   requestAnimationFrame(render);
 }
 
+function syncFullscreenToggle() {
+  const isFullscreen = document.fullscreenElement === stage;
+  fullscreenToggle.setAttribute("aria-pressed", String(isFullscreen));
+  fullscreenToggle.setAttribute(
+    "aria-label",
+    isFullscreen ? "Exit fullscreen" : "Enter fullscreen",
+  );
+  fullscreenToggle.title = isFullscreen ? "Exit fullscreen" : "Enter fullscreen";
+  panel.setAttribute(
+    "aria-label",
+    isFullscreen ? "Fullscreen controls" : "Artwork description",
+  );
+}
+
+function animateFullscreenPanelResize() {
+  const startRect = lastPanelRect;
+  panel.classList.add("is-fullscreen-resizing");
+  const endRect = panel.getBoundingClientRect();
+  panel.classList.remove("is-fullscreen-resizing");
+  lastPanelRect = endRect;
+
+  if (
+    !startRect
+    || typeof panel.animate !== "function"
+    || (
+      Math.abs(startRect.width - endRect.width) < 1
+      && Math.abs(startRect.height - endRect.height) < 1
+    )
+  ) {
+    return;
+  }
+
+  panel.animate(
+    [
+      {
+        width: `${startRect.width}px`,
+        height: `${startRect.height}px`,
+      },
+      {
+        width: `${endRect.width}px`,
+        height: `${endRect.height}px`,
+      },
+    ],
+    {
+      duration: 280,
+      easing: "cubic-bezier(0.16, 1, 0.3, 1)",
+    },
+  );
+}
+
+async function toggleFullscreen() {
+  lastPanelRect = panel.getBoundingClientRect();
+  try {
+    if (document.fullscreenElement) {
+      await document.exitFullscreen();
+    } else {
+      await stage.requestFullscreen();
+    }
+  } catch {
+    lastPanelRect = panel.getBoundingClientRect();
+    syncFullscreenToggle();
+  }
+}
+
 window.addEventListener("resize", resize);
 densityInput.addEventListener("input", () => {
   state.densityMultiplier = Number(densityInput.value) / 100;
   densityValue.value = `${densityInput.value}%`;
 });
+fullscreenToggle.addEventListener("click", () => {
+  void toggleFullscreen();
+});
 soundToggle.addEventListener("click", toggleSound);
+document.addEventListener("fullscreenchange", () => {
+  syncFullscreenToggle();
+  animateFullscreenPanelResize();
+  resize();
+});
 
 const mobilePanelQuery = window.matchMedia("(max-width: 760px)");
 
@@ -678,6 +753,12 @@ if (typeof mobilePanelQuery.addEventListener === "function") {
 }
 syncPanelForViewport(mobilePanelQuery);
 
+fullscreenToggle.hidden = (
+  !document.fullscreenEnabled
+  || typeof stage.requestFullscreen !== "function"
+);
+syncFullscreenToggle();
+lastPanelRect = panel.getBoundingClientRect();
 resize();
 const initialGlyphCount = Math.round(24 * effectiveDensity());
 for (let index = 0; index < initialGlyphCount; index += 1) {

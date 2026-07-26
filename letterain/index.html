@@ -22,6 +22,29 @@
           <h1>Letterain</h1>
           <div class="panel-actions">
             <button
+              id="fullscreenToggle"
+              class="fullscreen-toggle"
+              type="button"
+              aria-label="Enter fullscreen"
+              aria-pressed="false"
+              title="Enter fullscreen"
+            >
+              <svg
+                class="fullscreen-icon"
+                viewBox="0 0 16 16"
+                aria-hidden="true"
+              >
+                <path
+                  class="fullscreen-enter-icon"
+                  d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"
+                />
+                <path
+                  class="fullscreen-exit-icon"
+                  d="M6 2v4H2M14 6h-4V2M10 14v-4h4M2 10h4v4"
+                />
+              </svg>
+            </button>
+            <button
               id="soundToggle"
               class="sound-toggle"
               type="button"
