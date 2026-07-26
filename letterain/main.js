@@ -13,11 +13,7 @@ const panelTitle = panel.querySelector("h1");
 const backgroundCanvas = document.createElement("canvas");
 const backgroundCtx = backgroundCanvas.getContext("2d");
 
-const fullscreenState = {
-  pending: false,
-  panelCollapsedBeforeEntry: null,
-};
-
+let fullscreenTransitionPending = false;
 let wakeLock = null;
 let wakeLockRequest = null;
 
@@ -724,18 +720,12 @@ function syncFullscreenToggle() {
 }
 
 async function toggleFullscreen() {
-  if (fullscreenState.pending) {
+  if (fullscreenTransitionPending) {
     return;
   }
 
-  fullscreenState.pending = true;
+  fullscreenTransitionPending = true;
   const enteringFullscreen = !document.fullscreenElement;
-
-  if (enteringFullscreen) {
-    fullscreenState.panelCollapsedBeforeEntry = panel.classList.contains(
-      "is-collapsed",
-    );
-  }
 
   try {
     await (
@@ -744,25 +734,13 @@ async function toggleFullscreen() {
         : document.exitFullscreen()
     );
   } catch {
-    if (enteringFullscreen) {
-      fullscreenState.panelCollapsedBeforeEntry = null;
-    }
     syncFullscreenToggle();
   } finally {
-    fullscreenState.pending = false;
+    fullscreenTransitionPending = false;
   }
 }
 
 function handleFullscreenChange() {
-  const isFullscreen = document.fullscreenElement === stage;
-
-  if (isFullscreen) {
-    setPanelCollapsed(true);
-  } else if (fullscreenState.panelCollapsedBeforeEntry !== null) {
-    setPanelCollapsed(fullscreenState.panelCollapsedBeforeEntry);
-    fullscreenState.panelCollapsedBeforeEntry = null;
-  }
-
   syncFullscreenToggle();
   resize();
   void keepScreenAwake();
