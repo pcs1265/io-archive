@@ -18,6 +18,8 @@ let wakeLockRequest = null;
 const LETTERS = ["R", "A", "I", "N"];
 const COLORS = ["#c6f1ff", "#91d9f0", "#d7ebf1", "#70bed9"];
 const BASE_WIDTH = 1440;
+const WIDTH_DENSITY_INFLUENCE = 0.35;
+const BASE_DENSITY_MULTIPLIER = 1.2;
 const EMERGENCY_MAX_GLYPHS = 2000;
 const EMERGENCY_MAX_RIPPLES = 500;
 const EMERGENCY_MAX_DROPS = 1200;
@@ -56,11 +58,20 @@ const choose = (items) => items[Math.floor(Math.random() * items.length)];
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
 function widthDensity() {
-  return clamp(state.width / BASE_WIDTH, 0.45, 1.8);
+  const widthRatio = state.width / BASE_WIDTH;
+  return clamp(
+    1 + (widthRatio - 1) * WIDTH_DENSITY_INFLUENCE,
+    0.75,
+    1.35,
+  );
 }
 
 function effectiveDensity() {
-  return widthDensity() * state.densityMultiplier;
+  return (
+    widthDensity()
+    * state.densityMultiplier
+    * BASE_DENSITY_MULTIPLIER
+  );
 }
 
 function minImpactDepth() {
