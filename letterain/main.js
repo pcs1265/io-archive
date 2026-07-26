@@ -12,6 +12,8 @@ const panelDetails = document.querySelector("#panelDetails");
 const backgroundCanvas = document.createElement("canvas");
 const backgroundCtx = backgroundCanvas.getContext("2d");
 let lastPanelRect = null;
+let wakeLock = null;
+let wakeLockRequest = null;
 
 const LETTERS = ["R", "A", "I", "N"];
 const COLORS = ["#c6f1ff", "#91d9f0", "#d7ebf1", "#70bed9"];
@@ -646,6 +648,38 @@ function render(time = 0) {
   requestAnimationFrame(render);
 }
 
+function keepScreenAwake() {
+  if (
+    !("wakeLock" in navigator)
+    || document.visibilityState !== "visible"
+    || wakeLock
+  ) {
+    return Promise.resolve();
+  }
+
+  if (wakeLockRequest) {
+    return wakeLockRequest;
+  }
+
+  wakeLockRequest = navigator.wakeLock.request("screen")
+    .then((lock) => {
+      wakeLock = lock;
+      lock.addEventListener("release", () => {
+        if (wakeLock === lock) {
+          wakeLock = null;
+        }
+      }, { once: true });
+    })
+    .catch(() => {
+      // Unsupported policies and device power settings use normal sleep.
+    })
+    .finally(() => {
+      wakeLockRequest = null;
+    });
+
+  return wakeLockRequest;
+}
+
 function syncFullscreenToggle() {
   const isFullscreen = document.fullscreenElement === stage;
   fullscreenToggle.setAttribute("aria-pressed", String(isFullscreen));
@@ -723,6 +757,12 @@ document.addEventListener("fullscreenchange", () => {
   syncFullscreenToggle();
   animateFullscreenPanelResize();
   resize();
+  void keepScreenAwake();
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    void keepScreenAwake();
+  }
 });
 
 const mobilePanelQuery = window.matchMedia("(max-width: 760px)");
@@ -760,6 +800,7 @@ fullscreenToggle.hidden = (
 syncFullscreenToggle();
 lastPanelRect = panel.getBoundingClientRect();
 resize();
+void keepScreenAwake();
 const initialGlyphCount = Math.round(24 * effectiveDensity());
 for (let index = 0; index < initialGlyphCount; index += 1) {
   state.glyphs.push(makeGlyph({
