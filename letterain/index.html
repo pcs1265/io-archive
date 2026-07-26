@@ -23,7 +23,7 @@
           <div class="panel-actions">
             <button
               id="fullscreenToggle"
-              class="fullscreen-toggle"
+              class="icon-button fullscreen-toggle"
               type="button"
               aria-label="Enter fullscreen"
               aria-pressed="false"
@@ -46,7 +46,7 @@
             </button>
             <button
               id="soundToggle"
-              class="sound-toggle"
+              class="icon-button sound-toggle"
               type="button"
               aria-label="Turn sound on"
               aria-pressed="false"
@@ -56,10 +56,10 @@
             </button>
             <button
               id="panelToggle"
-              class="panel-toggle"
+              class="icon-button panel-toggle"
               type="button"
               aria-label="Show artwork controls"
-              aria-controls="panelDetails"
+              aria-controls="panelContent"
               aria-expanded="true"
             >
               <span class="chevron" aria-hidden="true"></span>
@@ -67,10 +67,11 @@
           </div>
         </div>
 
-        <p class="panel-description">Letters fall and fracture as rain.</p>
-
-        <div id="panelDetails" class="panel-details">
-          <div class="panel-details-inner">
+        <div id="panelContent" class="panel-content">
+          <div class="panel-content-inner">
+            <p class="panel-description">
+              Letters fall and fracture as rain.
+            </p>
             <div class="density-control">
               <label for="density">
                 <span>Density</span>

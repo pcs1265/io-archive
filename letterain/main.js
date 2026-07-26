@@ -8,14 +8,17 @@ const soundToggle = document.querySelector("#soundToggle");
 const soundIcon = document.querySelector("#soundIcon");
 const panel = document.querySelector(".panel");
 const panelToggle = document.querySelector("#panelToggle");
-const panelDetails = document.querySelector("#panelDetails");
+const panelContent = document.querySelector("#panelContent");
 const panelTitle = panel.querySelector("h1");
-const panelDescription = panel.querySelector(".panel-description");
 const backgroundCanvas = document.createElement("canvas");
 const backgroundCtx = backgroundCanvas.getContext("2d");
-let panelCollapsedBeforeFullscreen = null;
-let panelViewportWasMobileBeforeFullscreen = null;
-let fullscreenTransitionPending = false;
+const mobilePanelQuery = window.matchMedia("(max-width: 760px)");
+
+const fullscreenState = {
+  pending: false,
+  panelSnapshot: null,
+};
+
 let wakeLock = null;
 let wakeLockRequest = null;
 
@@ -61,6 +64,12 @@ const random = (min, max) => min + Math.random() * (max - min);
 const choose = (items) => items[Math.floor(Math.random() * items.length)];
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
+function trimOldest(items, limit) {
+  if (items.length > limit) {
+    items.splice(0, items.length - limit);
+  }
+}
+
 function widthDensity() {
   const widthRatio = state.width / BASE_WIDTH;
   return clamp(
@@ -71,11 +80,7 @@ function widthDensity() {
 }
 
 function effectiveDensity() {
-  return (
-    widthDensity()
-    * state.densityMultiplier
-    * BASE_DENSITY_MULTIPLIER
-  );
+  return widthDensity() * state.densityMultiplier * BASE_DENSITY_MULTIPLIER;
 }
 
 function minImpactDepth() {
@@ -102,7 +107,10 @@ function resize() {
   const oldHeight = state.height || window.innerHeight;
   const rect = canvas.getBoundingClientRect();
 
-  state.pixelRatio = Math.min(window.devicePixelRatio || 1, state.reducedMotion ? 1 : 1.5);
+  state.pixelRatio = Math.min(
+    window.devicePixelRatio || 1,
+    state.reducedMotion ? 1 : 1.5,
+  );
   state.width = rect.width || window.innerWidth;
   state.height = rect.height || window.innerHeight;
   state.groundY = state.height * 0.86;
@@ -197,10 +205,7 @@ function addRipple(x, y, strength = 1) {
     alpha: 0.42 * strength,
     speed: random(65, 95),
   });
-  const limit = EMERGENCY_MAX_RIPPLES;
-  if (state.ripples.length > limit) {
-    state.ripples.splice(0, state.ripples.length - limit);
-  }
+  trimOldest(state.ripples, EMERGENCY_MAX_RIPPLES);
 }
 
 function addDrops(x, y, color) {
@@ -216,10 +221,7 @@ function addDrops(x, y, color) {
       color,
     });
   }
-  const limit = EMERGENCY_MAX_DROPS;
-  if (state.drops.length > limit) {
-    state.drops.splice(0, state.drops.length - limit);
-  }
+  trimOldest(state.drops, EMERGENCY_MAX_DROPS);
 }
 
 function detectImpactOffsets(buffer) {
@@ -269,22 +271,24 @@ function detectImpactOffsets(buffer) {
 
   const minimumSpacing = Math.ceil(0.14 * sampleRate / hopSize);
   const selected = [];
-  candidates
-    .sort((a, b) => b.score - a.score)
-    .some((candidate) => {
-      const isSeparate = selected.every(
-        (index) => Math.abs(index - candidate.index) >= minimumSpacing,
-      );
-      if (isSeparate) {
-        selected.push(candidate.index);
-      }
-      return selected.length >= 160;
-    });
+  candidates.sort((a, b) => b.score - a.score);
+
+  for (const candidate of candidates) {
+    const isSeparate = selected.every(
+      (index) => Math.abs(index - candidate.index) >= minimumSpacing,
+    );
+    if (isSeparate) {
+      selected.push(candidate.index);
+    }
+    if (selected.length >= 160) {
+      break;
+    }
+  }
 
   return selected.map((index) => index * hopSize / sampleRate);
 }
 
-function createReverb(audioContext) {
+function createReverb(audioContext, destination) {
   const preDelay = audioContext.createDelay(0.1);
   const convolver = audioContext.createConvolver();
   const toneFilter = audioContext.createBiquadFilter();
@@ -312,11 +316,11 @@ function createReverb(audioContext) {
     .connect(convolver)
     .connect(toneFilter)
     .connect(wetGain)
-    .connect(sound.masterGain);
+    .connect(destination);
   return preDelay;
 }
 
-async function enableSound() {
+async function prepareSound() {
   if (!sound.context) {
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     if (!AudioContext) {
@@ -332,7 +336,7 @@ async function enableSound() {
     sound.limiter.attack.value = 0.002;
     sound.limiter.release.value = 0.12;
     sound.masterGain.connect(sound.limiter).connect(sound.context.destination);
-    sound.reverb = createReverb(sound.context);
+    sound.reverb = createReverb(sound.context, sound.masterGain);
   }
 
   if (sound.context.state === "suspended") {
@@ -353,45 +357,55 @@ async function enableSound() {
         sound.impactOffsets = detectImpactOffsets(buffer);
       })
       .catch(() => {
+        sound.buffer = null;
+        sound.impactOffsets = [];
+      })
+      .finally(() => {
         sound.loading = null;
       });
   }
 }
 
+function syncSoundToggle() {
+  const enabled = sound.enabled;
+  soundToggle.setAttribute("aria-pressed", String(enabled));
+  soundToggle.setAttribute(
+    "aria-label",
+    enabled ? "Turn sound off" : "Turn sound on",
+  );
+  soundToggle.title = enabled ? "Sound on" : "Sound off";
+  soundIcon.textContent = enabled ? "🔊" : "🔇";
+}
+
+function setSoundEnabled(enabled) {
+  sound.enabled = enabled;
+
+  const now = sound.context.currentTime;
+  sound.masterGain.gain.cancelScheduledValues(now);
+  sound.masterGain.gain.setTargetAtTime(
+    enabled ? 1 : 0.0001,
+    now,
+    SOUND_FADE_TIME,
+  );
+  syncSoundToggle();
+}
+
 async function toggleSound() {
   if (!sound.enabled) {
-    await enableSound();
+    await prepareSound();
     if (!sound.context || !sound.masterGain) {
       return;
     }
-
-    sound.enabled = true;
-    const now = sound.context.currentTime;
-    sound.masterGain.gain.cancelScheduledValues(now);
-    sound.masterGain.gain.setTargetAtTime(1, now, SOUND_FADE_TIME);
-    soundToggle.setAttribute("aria-pressed", "true");
-    soundToggle.setAttribute("aria-label", "Turn sound off");
-    soundToggle.title = "Sound on";
-    soundIcon.textContent = "🔊";
-    return;
   }
 
-  sound.enabled = false;
-  const now = sound.context.currentTime;
-  sound.masterGain.gain.cancelScheduledValues(now);
-  sound.masterGain.gain.setTargetAtTime(0.0001, now, SOUND_FADE_TIME);
-  soundToggle.setAttribute("aria-pressed", "false");
-  soundToggle.setAttribute("aria-label", "Turn sound on");
-  soundToggle.title = "Sound off";
-  soundIcon.textContent = "🔇";
+  setSoundEnabled(!sound.enabled);
 }
 
 function playImpactSound(x, size, impactSpeed) {
   const audioContext = sound.context;
   if (
     !sound.enabled
-    ||
-    !audioContext
+    || !audioContext
     || audioContext.state !== "running"
     || !sound.buffer
     || sound.impactOffsets.length === 0
@@ -480,9 +494,9 @@ function fracture(glyph) {
   playImpactSound(impactX, glyph.size, Math.abs(glyph.vy));
 
   const childSize = Math.max(8, glyph.size * 0.4);
-  LETTERS.forEach((letter, index) => {
+  return LETTERS.map((letter, index) => {
     const direction = (index - 1.5) / 1.5;
-    state.glyphs.push(makeGlyph({
+    return makeGlyph({
       letter,
       x: impactX + direction * 5,
       y: impactY - childSize * 0.4,
@@ -498,7 +512,7 @@ function fracture(glyph) {
       rotation: glyph.rotation,
       spin: direction * random(3.2, 5.8),
       life: random(0.9, 1.45),
-    }));
+    });
   });
 }
 
@@ -506,12 +520,12 @@ function update(dt) {
   const rainGravity = state.reducedMotion ? 60 : 105;
   const splashGravity = state.reducedMotion ? 230 : 360;
   const nextGlyphs = [];
+  const fracturedGlyphs = [];
   const density = effectiveDensity();
-  const maxGlyphs = EMERGENCY_MAX_GLYPHS;
 
   state.spawnTimer -= dt;
   if (state.spawnTimer <= 0) {
-    if (state.glyphs.length < maxGlyphs * 0.86) {
+    if (state.glyphs.length < EMERGENCY_MAX_GLYPHS * 0.86) {
       spawnLetters(Math.random() < 0.76 ? 2 : 1);
     }
     state.spawnTimer = state.reducedMotion
@@ -535,8 +549,12 @@ function update(dt) {
 
     const baseline = state.groundY + glyph.impactDepth;
     if (glyph.y >= baseline && glyph.vy > 0) {
-      if (glyph.generation === 0 && state.glyphs.length < maxGlyphs - 4) {
-        fracture(glyph);
+      const hasRoomToFracture = (
+        state.glyphs.length + fracturedGlyphs.length
+        < EMERGENCY_MAX_GLYPHS - LETTERS.length
+      );
+      if (glyph.generation === 0 && hasRoomToFracture) {
+        fracturedGlyphs.push(...fracture(glyph));
       } else {
         addRipple(glyph.x, baseline, 0.45);
         addDrops(glyph.x, baseline, glyph.color);
@@ -549,7 +567,9 @@ function update(dt) {
     }
   }
 
-  state.glyphs = nextGlyphs.slice(-maxGlyphs);
+  state.glyphs = nextGlyphs
+    .concat(fracturedGlyphs)
+    .slice(-EMERGENCY_MAX_GLYPHS);
 
   state.ripples = state.ripples.filter((ripple) => {
     ripple.radius += ripple.speed * dt;
@@ -697,135 +717,152 @@ function keepScreenAwake() {
 
 function syncFullscreenToggle() {
   const isFullscreen = document.fullscreenElement === stage;
+  const label = isFullscreen ? "Exit fullscreen" : "Enter fullscreen";
+
   fullscreenToggle.setAttribute("aria-pressed", String(isFullscreen));
-  fullscreenToggle.setAttribute(
-    "aria-label",
-    isFullscreen ? "Exit fullscreen" : "Enter fullscreen",
-  );
-  fullscreenToggle.title = isFullscreen ? "Exit fullscreen" : "Enter fullscreen";
+  fullscreenToggle.setAttribute("aria-label", label);
+  fullscreenToggle.title = label;
 }
 
 async function toggleFullscreen() {
-  if (fullscreenTransitionPending) {
+  if (fullscreenState.pending) {
     return;
   }
 
-  fullscreenTransitionPending = true;
+  fullscreenState.pending = true;
   const enteringFullscreen = !document.fullscreenElement;
+
   if (enteringFullscreen) {
-    panelCollapsedBeforeFullscreen = panel.classList.contains("is-collapsed");
-    panelViewportWasMobileBeforeFullscreen = mobilePanelQuery.matches;
+    fullscreenState.panelSnapshot = {
+      collapsed: panel.classList.contains("is-collapsed"),
+      wasMobile: mobilePanelQuery.matches,
+    };
   }
 
   try {
-    if (document.fullscreenElement) {
-      await document.exitFullscreen();
-    } else {
-      await stage.requestFullscreen();
-    }
+    await (
+      enteringFullscreen
+        ? stage.requestFullscreen()
+        : document.exitFullscreen()
+    );
   } catch {
     if (enteringFullscreen) {
-      panelCollapsedBeforeFullscreen = null;
-      panelViewportWasMobileBeforeFullscreen = null;
+      fullscreenState.panelSnapshot = null;
     }
     syncFullscreenToggle();
   } finally {
-    fullscreenTransitionPending = false;
+    fullscreenState.pending = false;
   }
 }
 
-window.addEventListener("resize", resize);
-densityInput.addEventListener("input", () => {
-  state.densityMultiplier = Number(densityInput.value) / 100;
-  densityValue.value = `${densityInput.value}%`;
-});
-fullscreenToggle.addEventListener("click", () => {
-  void toggleFullscreen();
-});
-soundToggle.addEventListener("click", toggleSound);
-document.addEventListener("fullscreenchange", () => {
+function handleFullscreenChange() {
   const isFullscreen = document.fullscreenElement === stage;
+
   if (isFullscreen) {
     setPanelCollapsed(true);
-  } else if (panelCollapsedBeforeFullscreen !== null) {
-    const viewportModeChanged = (
-      panelViewportWasMobileBeforeFullscreen !== null
-      && panelViewportWasMobileBeforeFullscreen !== mobilePanelQuery.matches
-    );
-    setPanelCollapsed(
-      viewportModeChanged
-        ? mobilePanelQuery.matches
-        : panelCollapsedBeforeFullscreen,
-    );
-    panelCollapsedBeforeFullscreen = null;
-    panelViewportWasMobileBeforeFullscreen = null;
+  } else if (fullscreenState.panelSnapshot) {
+    const { collapsed, wasMobile } = fullscreenState.panelSnapshot;
+    const panelState = wasMobile === mobilePanelQuery.matches
+      ? collapsed
+      : mobilePanelQuery.matches;
+    setPanelCollapsed(panelState);
+    fullscreenState.panelSnapshot = null;
   }
 
   syncFullscreenToggle();
   resize();
   void keepScreenAwake();
-});
-document.addEventListener("visibilitychange", () => {
+}
+
+function handleVisibilityChange() {
   if (document.visibilityState === "visible") {
     void keepScreenAwake();
   }
-});
+}
 
-const mobilePanelQuery = window.matchMedia("(max-width: 760px)");
+function setPanelCollapsed(collapsed) {
+  const expanded = !collapsed;
 
-function syncPanelAccessibility() {
-  const collapsed = panel.classList.contains("is-collapsed");
-
+  panel.classList.toggle("is-collapsed", collapsed);
+  panelToggle.setAttribute("aria-expanded", String(expanded));
+  panelToggle.setAttribute(
+    "aria-label",
+    collapsed ? "Show artwork controls" : "Hide artwork controls",
+  );
+  panelContent.setAttribute("aria-hidden", String(collapsed));
+  panelContent.inert = collapsed;
   panelTitle.setAttribute("aria-hidden", String(collapsed));
-  panelDescription.setAttribute("aria-hidden", String(collapsed));
   panel.setAttribute(
     "aria-label",
     collapsed ? "Artwork controls" : "Artwork description and controls",
   );
 }
 
-function setPanelCollapsed(collapsed) {
-  panel.classList.toggle("is-collapsed", collapsed);
-  panelToggle.setAttribute("aria-expanded", String(!collapsed));
-  panelToggle.setAttribute(
-    "aria-label",
-    collapsed ? "Show artwork controls" : "Hide artwork controls",
-  );
-  panelDetails.setAttribute("aria-hidden", String(collapsed));
-  panelDetails.inert = collapsed;
-  syncPanelAccessibility();
-}
-
-function syncPanelForViewport(event) {
+function syncPanelForViewport({ matches }) {
   if (document.fullscreenElement === stage) {
     return;
   }
-  setPanelCollapsed(event.matches);
+  setPanelCollapsed(matches);
 }
 
-panelToggle.addEventListener("click", () => {
+function handleDensityInput() {
+  state.densityMultiplier = Number(densityInput.value) / 100;
+  densityValue.value = `${densityInput.value}%`;
+}
+
+function togglePanel() {
   setPanelCollapsed(!panel.classList.contains("is-collapsed"));
-});
-
-if (typeof mobilePanelQuery.addEventListener === "function") {
-  mobilePanelQuery.addEventListener("change", syncPanelForViewport);
-} else {
-  mobilePanelQuery.addListener(syncPanelForViewport);
 }
-syncPanelForViewport(mobilePanelQuery);
 
-fullscreenToggle.hidden = (
-  !document.fullscreenEnabled
-  || typeof stage.requestFullscreen !== "function"
-);
-syncFullscreenToggle();
-resize();
-void keepScreenAwake();
-const initialGlyphCount = Math.round(24 * effectiveDensity());
-for (let index = 0; index < initialGlyphCount; index += 1) {
-  state.glyphs.push(makeGlyph({
-    y: random(-state.height * 0.9, state.groundY - 110),
-    vy: random(390, 540),
-  }));
+function handleFullscreenToggle() {
+  void toggleFullscreen();
 }
-requestAnimationFrame(render);
+
+function handleSoundToggle() {
+  void toggleSound().catch(() => {
+    // Browsers can reject audio activation without a valid user gesture.
+  });
+}
+
+function seedRain() {
+  const initialGlyphCount = Math.round(24 * effectiveDensity());
+  for (let index = 0; index < initialGlyphCount; index += 1) {
+    state.glyphs.push(makeGlyph({
+      y: random(-state.height * 0.9, state.groundY - 110),
+      vy: random(390, 540),
+    }));
+  }
+}
+
+function bindEvents() {
+  window.addEventListener("resize", resize);
+  densityInput.addEventListener("input", handleDensityInput);
+  fullscreenToggle.addEventListener("click", handleFullscreenToggle);
+  soundToggle.addEventListener("click", handleSoundToggle);
+  panelToggle.addEventListener("click", togglePanel);
+  document.addEventListener("fullscreenchange", handleFullscreenChange);
+  document.addEventListener("visibilitychange", handleVisibilityChange);
+
+  if (typeof mobilePanelQuery.addEventListener === "function") {
+    mobilePanelQuery.addEventListener("change", syncPanelForViewport);
+  } else {
+    mobilePanelQuery.addListener(syncPanelForViewport);
+  }
+}
+
+function initialize() {
+  bindEvents();
+  setPanelCollapsed(mobilePanelQuery.matches);
+  fullscreenToggle.hidden = (
+    !document.fullscreenEnabled
+    || typeof stage.requestFullscreen !== "function"
+  );
+  syncFullscreenToggle();
+  syncSoundToggle();
+  resize();
+  seedRain();
+  void keepScreenAwake();
+  requestAnimationFrame(render);
+}
+
+initialize();
