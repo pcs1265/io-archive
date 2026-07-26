@@ -9,9 +9,13 @@ const soundIcon = document.querySelector("#soundIcon");
 const panel = document.querySelector(".panel");
 const panelToggle = document.querySelector("#panelToggle");
 const panelDetails = document.querySelector("#panelDetails");
+const panelTitle = panel.querySelector("h1");
+const panelDescription = panel.querySelector(".panel-description");
 const backgroundCanvas = document.createElement("canvas");
 const backgroundCtx = backgroundCanvas.getContext("2d");
-let lastPanelRect = null;
+let panelCollapsedBeforeFullscreen = null;
+let panelViewportWasMobileBeforeFullscreen = null;
+let fullscreenTransitionPending = false;
 let wakeLock = null;
 let wakeLockRequest = null;
 
@@ -699,50 +703,20 @@ function syncFullscreenToggle() {
     isFullscreen ? "Exit fullscreen" : "Enter fullscreen",
   );
   fullscreenToggle.title = isFullscreen ? "Exit fullscreen" : "Enter fullscreen";
-  panel.setAttribute(
-    "aria-label",
-    isFullscreen ? "Fullscreen controls" : "Artwork description",
-  );
-}
-
-function animateFullscreenPanelResize() {
-  const startRect = lastPanelRect;
-  panel.classList.add("is-fullscreen-resizing");
-  const endRect = panel.getBoundingClientRect();
-  panel.classList.remove("is-fullscreen-resizing");
-  lastPanelRect = endRect;
-
-  if (
-    !startRect
-    || typeof panel.animate !== "function"
-    || (
-      Math.abs(startRect.width - endRect.width) < 1
-      && Math.abs(startRect.height - endRect.height) < 1
-    )
-  ) {
-    return;
-  }
-
-  panel.animate(
-    [
-      {
-        width: `${startRect.width}px`,
-        height: `${startRect.height}px`,
-      },
-      {
-        width: `${endRect.width}px`,
-        height: `${endRect.height}px`,
-      },
-    ],
-    {
-      duration: 280,
-      easing: "cubic-bezier(0.16, 1, 0.3, 1)",
-    },
-  );
 }
 
 async function toggleFullscreen() {
-  lastPanelRect = panel.getBoundingClientRect();
+  if (fullscreenTransitionPending) {
+    return;
+  }
+
+  fullscreenTransitionPending = true;
+  const enteringFullscreen = !document.fullscreenElement;
+  if (enteringFullscreen) {
+    panelCollapsedBeforeFullscreen = panel.classList.contains("is-collapsed");
+    panelViewportWasMobileBeforeFullscreen = mobilePanelQuery.matches;
+  }
+
   try {
     if (document.fullscreenElement) {
       await document.exitFullscreen();
@@ -750,8 +724,13 @@ async function toggleFullscreen() {
       await stage.requestFullscreen();
     }
   } catch {
-    lastPanelRect = panel.getBoundingClientRect();
+    if (enteringFullscreen) {
+      panelCollapsedBeforeFullscreen = null;
+      panelViewportWasMobileBeforeFullscreen = null;
+    }
     syncFullscreenToggle();
+  } finally {
+    fullscreenTransitionPending = false;
   }
 }
 
@@ -765,8 +744,24 @@ fullscreenToggle.addEventListener("click", () => {
 });
 soundToggle.addEventListener("click", toggleSound);
 document.addEventListener("fullscreenchange", () => {
+  const isFullscreen = document.fullscreenElement === stage;
+  if (isFullscreen) {
+    setPanelCollapsed(true);
+  } else if (panelCollapsedBeforeFullscreen !== null) {
+    const viewportModeChanged = (
+      panelViewportWasMobileBeforeFullscreen !== null
+      && panelViewportWasMobileBeforeFullscreen !== mobilePanelQuery.matches
+    );
+    setPanelCollapsed(
+      viewportModeChanged
+        ? mobilePanelQuery.matches
+        : panelCollapsedBeforeFullscreen,
+    );
+    panelCollapsedBeforeFullscreen = null;
+    panelViewportWasMobileBeforeFullscreen = null;
+  }
+
   syncFullscreenToggle();
-  animateFullscreenPanelResize();
   resize();
   void keepScreenAwake();
 });
@@ -778,6 +773,17 @@ document.addEventListener("visibilitychange", () => {
 
 const mobilePanelQuery = window.matchMedia("(max-width: 760px)");
 
+function syncPanelAccessibility() {
+  const collapsed = panel.classList.contains("is-collapsed");
+
+  panelTitle.setAttribute("aria-hidden", String(collapsed));
+  panelDescription.setAttribute("aria-hidden", String(collapsed));
+  panel.setAttribute(
+    "aria-label",
+    collapsed ? "Artwork controls" : "Artwork description and controls",
+  );
+}
+
 function setPanelCollapsed(collapsed) {
   panel.classList.toggle("is-collapsed", collapsed);
   panelToggle.setAttribute("aria-expanded", String(!collapsed));
@@ -787,9 +793,13 @@ function setPanelCollapsed(collapsed) {
   );
   panelDetails.setAttribute("aria-hidden", String(collapsed));
   panelDetails.inert = collapsed;
+  syncPanelAccessibility();
 }
 
 function syncPanelForViewport(event) {
+  if (document.fullscreenElement === stage) {
+    return;
+  }
   setPanelCollapsed(event.matches);
 }
 
@@ -809,7 +819,6 @@ fullscreenToggle.hidden = (
   || typeof stage.requestFullscreen !== "function"
 );
 syncFullscreenToggle();
-lastPanelRect = panel.getBoundingClientRect();
 resize();
 void keepScreenAwake();
 const initialGlyphCount = Math.round(24 * effectiveDensity());

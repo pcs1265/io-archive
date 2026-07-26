@@ -4,6 +4,8 @@
   --muted: rgba(197, 226, 239, 0.58);
   --panel: rgba(4, 15, 22, 0.58);
   --panel-border: rgba(190, 229, 244, 0.16);
+  --panel-motion-duration: 280ms;
+  --panel-motion-easing: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 * {
@@ -58,13 +60,11 @@ body {
   background: var(--panel);
   backdrop-filter: blur(18px);
   box-shadow: 0 22px 70px rgba(0, 0, 0, 0.28);
+  cursor: default;
+  user-select: none;
   transition:
-    width 240ms cubic-bezier(0.16, 1, 0.3, 1),
-    padding 240ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.panel.is-fullscreen-resizing {
-  transition: none;
+    width var(--panel-motion-duration) var(--panel-motion-easing),
+    padding var(--panel-motion-duration) var(--panel-motion-easing);
 }
 
 .panel-header {
@@ -72,30 +72,45 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  transition: gap var(--panel-motion-duration) var(--panel-motion-easing);
 }
 
 .panel-actions {
   display: flex;
   align-items: center;
   gap: 4px;
+  transition: gap var(--panel-motion-duration) var(--panel-motion-easing);
 }
 
 h1 {
+  max-width: 10rem;
   margin: 0;
+  overflow: hidden;
   font-size: 0.92rem;
   font-weight: 720;
   letter-spacing: 0;
+  white-space: nowrap;
+  opacity: 1;
+  transition:
+    max-width var(--panel-motion-duration) var(--panel-motion-easing),
+    opacity var(--panel-motion-duration) ease;
 }
 
 .panel-details {
-  max-height: 160px;
+  display: grid;
+  grid-template-rows: 1fr;
   padding: 2px 0 6px;
   overflow: hidden;
   opacity: 1;
   transition:
-    max-height 240ms cubic-bezier(0.16, 1, 0.3, 1),
-    padding 180ms ease,
-    opacity 160ms ease;
+    grid-template-rows var(--panel-motion-duration) var(--panel-motion-easing),
+    padding var(--panel-motion-duration) var(--panel-motion-easing),
+    opacity var(--panel-motion-duration) ease;
+}
+
+.panel-details-inner {
+  min-height: 0;
+  overflow: hidden;
 }
 
 p {
@@ -107,7 +122,14 @@ p {
 }
 
 .panel-description {
+  max-height: 2em;
   margin-top: 2px;
+  overflow: hidden;
+  opacity: 1;
+  transition:
+    max-height var(--panel-motion-duration) var(--panel-motion-easing),
+    margin-top var(--panel-motion-duration) var(--panel-motion-easing),
+    opacity var(--panel-motion-duration) ease;
 }
 
 .density-control {
@@ -154,6 +176,16 @@ p {
   background: rgba(198, 241, 255, 0.06);
   color: var(--muted);
   cursor: pointer;
+  opacity: 1;
+  transition:
+    width var(--panel-motion-duration) var(--panel-motion-easing),
+    height var(--panel-motion-duration) var(--panel-motion-easing),
+    padding var(--panel-motion-duration) var(--panel-motion-easing),
+    border-width var(--panel-motion-duration) var(--panel-motion-easing),
+    border-color var(--panel-motion-duration) ease,
+    background var(--panel-motion-duration) ease,
+    color var(--panel-motion-duration) ease,
+    opacity var(--panel-motion-duration) ease;
 }
 
 .fullscreen-toggle[hidden] {
@@ -208,7 +240,7 @@ p {
   border-right: 1.5px solid currentColor;
   border-bottom: 1.5px solid currentColor;
   transform: translateY(-2px) rotate(45deg);
-  transition: transform 180ms ease;
+  transition: transform var(--panel-motion-duration) var(--panel-motion-easing);
 }
 
 .panel-toggle[aria-expanded="true"] .chevron {
@@ -216,34 +248,39 @@ p {
 }
 
 .panel.is-collapsed {
-  width: 210px;
+  width: 114px;
+  padding: 6px;
+}
+
+.panel.is-collapsed .panel-header {
+  gap: 0;
+}
+
+.panel.is-collapsed .panel-actions {
+  gap: 2px;
+}
+
+.panel.is-collapsed .panel-header h1 {
+  max-width: 0;
+  opacity: 0;
+}
+
+.panel.is-collapsed .panel-description {
+  max-height: 0;
+  margin-top: 0;
+  opacity: 0;
 }
 
 .panel.is-collapsed .panel-details {
-  max-height: 0;
+  grid-template-rows: 0fr;
   padding: 0;
   opacity: 0;
   pointer-events: none;
 }
 
-.stage:fullscreen .panel {
-  width: auto;
-  padding: 6px;
-}
-
-.stage:fullscreen .panel-header {
-  display: block;
-}
-
-.stage:fullscreen .panel-header h1,
-.stage:fullscreen .sound-toggle,
-.stage:fullscreen .panel-toggle,
-.stage:fullscreen .panel-description,
-.stage:fullscreen .panel-details {
-  display: none;
-}
-
-.stage:fullscreen .fullscreen-toggle {
+.panel.is-collapsed .fullscreen-toggle,
+.panel.is-collapsed .sound-toggle,
+.panel.is-collapsed .panel-toggle {
   width: 32px;
   height: 32px;
 }
@@ -251,5 +288,13 @@ p {
 @media (max-width: 760px) {
   .panel {
     width: min(300px, calc(100vw - 32px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel,
+  .panel * {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
   }
 }
