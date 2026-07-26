@@ -12,11 +12,10 @@ const panelContent = document.querySelector("#panelContent");
 const panelTitle = panel.querySelector("h1");
 const backgroundCanvas = document.createElement("canvas");
 const backgroundCtx = backgroundCanvas.getContext("2d");
-const mobilePanelQuery = window.matchMedia("(max-width: 760px)");
 
 const fullscreenState = {
   pending: false,
-  panelSnapshot: null,
+  panelCollapsedBeforeEntry: null,
 };
 
 let wakeLock = null;
@@ -733,10 +732,9 @@ async function toggleFullscreen() {
   const enteringFullscreen = !document.fullscreenElement;
 
   if (enteringFullscreen) {
-    fullscreenState.panelSnapshot = {
-      collapsed: panel.classList.contains("is-collapsed"),
-      wasMobile: mobilePanelQuery.matches,
-    };
+    fullscreenState.panelCollapsedBeforeEntry = panel.classList.contains(
+      "is-collapsed",
+    );
   }
 
   try {
@@ -747,7 +745,7 @@ async function toggleFullscreen() {
     );
   } catch {
     if (enteringFullscreen) {
-      fullscreenState.panelSnapshot = null;
+      fullscreenState.panelCollapsedBeforeEntry = null;
     }
     syncFullscreenToggle();
   } finally {
@@ -760,13 +758,9 @@ function handleFullscreenChange() {
 
   if (isFullscreen) {
     setPanelCollapsed(true);
-  } else if (fullscreenState.panelSnapshot) {
-    const { collapsed, wasMobile } = fullscreenState.panelSnapshot;
-    const panelState = wasMobile === mobilePanelQuery.matches
-      ? collapsed
-      : mobilePanelQuery.matches;
-    setPanelCollapsed(panelState);
-    fullscreenState.panelSnapshot = null;
+  } else if (fullscreenState.panelCollapsedBeforeEntry !== null) {
+    setPanelCollapsed(fullscreenState.panelCollapsedBeforeEntry);
+    fullscreenState.panelCollapsedBeforeEntry = null;
   }
 
   syncFullscreenToggle();
@@ -796,13 +790,6 @@ function setPanelCollapsed(collapsed) {
     "aria-label",
     collapsed ? "Artwork controls" : "Artwork description and controls",
   );
-}
-
-function syncPanelForViewport({ matches }) {
-  if (document.fullscreenElement === stage) {
-    return;
-  }
-  setPanelCollapsed(matches);
 }
 
 function handleDensityInput() {
@@ -842,17 +829,11 @@ function bindEvents() {
   panelToggle.addEventListener("click", togglePanel);
   document.addEventListener("fullscreenchange", handleFullscreenChange);
   document.addEventListener("visibilitychange", handleVisibilityChange);
-
-  if (typeof mobilePanelQuery.addEventListener === "function") {
-    mobilePanelQuery.addEventListener("change", syncPanelForViewport);
-  } else {
-    mobilePanelQuery.addListener(syncPanelForViewport);
-  }
 }
 
 function initialize() {
   bindEvents();
-  setPanelCollapsed(mobilePanelQuery.matches);
+  setPanelCollapsed(false);
   fullscreenToggle.hidden = (
     !document.fullscreenEnabled
     || typeof stage.requestFullscreen !== "function"

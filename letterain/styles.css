@@ -127,6 +127,7 @@ body {
 
 .density-control {
   margin-top: 8px;
+  padding-bottom: 4px;
 }
 
 .density-control label {
